@@ -7215,7 +7215,8 @@ The rule this encodes: **a claim about behaviour belongs next to a test, or it b
 **Fork benchmark experiment (2026-09-05).** The optional
 `LOOMARR_ANDROID_GRADLE_CACHE` build setting compares Gradle task-output caching
 (`gradle`) with BoringCache's remote Gradle adapter (`boringcache`). The default
-build is unchanged. This build-only dependency uses the released CLI selected
+build is unchanged; `boringcache-restore` makes the warm benchmark read-only.
+This build-only dependency uses the released CLI selected
 by the reviewed `boringcache/one` distribution
 `c62af42c5c1e29388ceeea77b6a7f1db51f641e7`; its exact resolved version is retained
 with each benchmark. The experiment preserves clean Expo prebuild, all four

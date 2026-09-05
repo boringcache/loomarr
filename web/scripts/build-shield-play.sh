@@ -59,6 +59,7 @@ export EXPO_PUBLIC_LOOMARR_CLIENT_VERSION="${VERSION_NAME}"
     "") gradle_command=(./gradlew) ;;
     gradle) gradle_command=(./gradlew --build-cache) ;;
     boringcache) gradle_command=(boringcache gradle -- ./gradlew) ;;
+    boringcache-restore) gradle_command=(boringcache gradle --read-only -- ./gradlew) ;;
     *)
       printf 'unsupported Android Gradle cache mode: %s\n' "${LOOMARR_ANDROID_GRADLE_CACHE}" >&2
       exit 2
