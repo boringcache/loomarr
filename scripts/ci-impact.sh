@@ -73,6 +73,11 @@ classify() {
   fi
 
   case "$path" in
+    .boringcache.toml)
+      known=true
+      select_gate android
+      select_gate policy
+      ;;
     Cargo.toml|Cargo.lock|rust-toolchain.toml|deny.toml|rust/*)
       known=true
       select_gate rust
