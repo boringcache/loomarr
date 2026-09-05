@@ -55,8 +55,17 @@ export EXPO_PUBLIC_LOOMARR_CLIENT_VERSION="${VERSION_NAME}"
 
 (
   cd "${APP_DIR}/android"
+  case "${LOOMARR_ANDROID_GRADLE_CACHE:-}" in
+    "") gradle_command=(./gradlew) ;;
+    gradle) gradle_command=(./gradlew --build-cache) ;;
+    boringcache) gradle_command=(boringcache gradle -- ./gradlew) ;;
+    *)
+      printf 'unsupported Android Gradle cache mode: %s\n' "${LOOMARR_ANDROID_GRADLE_CACHE}" >&2
+      exit 2
+      ;;
+  esac
   CMAKE_BUILD_PARALLEL_LEVEL="${NATIVE_JOBS}" NODE_ENV=production EXPO_TV=1 \
-    ./gradlew bundleRelease \
+    "${gradle_command[@]}" bundleRelease \
       --no-daemon \
       --max-workers=1 \
       "-Dorg.gradle.jvmargs=-Xmx${GRADLE_HEAP}" \

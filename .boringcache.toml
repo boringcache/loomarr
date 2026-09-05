@@ -1,0 +1,9 @@
+workspace = "boringcache/benchmarks"
+
+[proxy]
+metadata-hints = ["project=loomarr"]
+
+[adapters.gradle]
+tag = "loomarr-android-play-20260905"
+fail-on-cache-error = true
+metadata-hints = ["tool=gradle", "lane=android-play"]

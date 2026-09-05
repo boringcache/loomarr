@@ -7212,6 +7212,16 @@ The rule this encodes: **a claim about behaviour belongs next to a test, or it b
 
 ## 14. Technology stack (decided)
 
+**Fork benchmark experiment (2026-09-05).** The optional
+`LOOMARR_ANDROID_GRADLE_CACHE` build setting compares Gradle task-output caching
+(`gradle`) with BoringCache's remote Gradle adapter (`boringcache`). The default
+build is unchanged. This build-only dependency uses the released CLI selected
+by the reviewed `boringcache/one` distribution
+`c62af42c5c1e29388ceeea77b6a7f1db51f641e7`; its exact resolved version is retained
+with each benchmark. The experiment preserves clean Expo prebuild, all four
+ABIs, worker and memory limits, and every existing bundle verification. It does
+not add a native compiler cache or make additional Gradle tasks cacheable.
+
 **Maintainer-approved client exception (2026-08-23; migration authorized 2026-09-03).** React Native and Expo are approved
 application runtimes for Loomarr's end-user client binaries. They do not replace or duplicate the Go
 server, scheduler, authorization, playout, or domain logic. The P3.5 shared-interface proof is
