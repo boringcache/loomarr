@@ -30,6 +30,17 @@ subprojects { subproject ->
                 "-DCMAKE_JOB_POOL_COMPILE=loomarr_compile",
                 "-DCMAKE_JOB_POOL_LINK=loomarr_link"
             )
+            if (System.getenv("CMAKE_CXX_COMPILER_LAUNCHER") == "ccache") {
+                // React Native otherwise adds a second ccache wrapper, including links.
+                subproject.android.defaultConfig.externalNativeBuild.cmake.arguments(
+                    "-DCCACHE_FOUND=OFF"
+                )
+                if (subproject.name == "react-native-worklets") {
+                    subproject.android.defaultConfig.externalNativeBuild.cmake.cppFlags(
+                        "-Xclang", "-fno-pch-timestamp"
+                    )
+                }
+            }
         }
     }
 }

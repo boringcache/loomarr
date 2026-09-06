@@ -1,0 +1,15 @@
+workspace = "boringcache/benchmarks"
+
+[proxy]
+metadata-hints = ["project=loomarr"]
+
+[adapters.gradle]
+tag = "loomarr-compiler-rolling-gradle-20260906"
+fail-on-cache-error = true
+metadata-hints = ["tool=gradle", "lane=android-play"]
+
+[adapters.ccache]
+tag = "loomarr-compiler-rolling-ccache-20260906"
+command = ["make", "android"]
+fail-on-cache-error = true
+metadata-hints = ["tool=ccache", "lane=android-play"]
