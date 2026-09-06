@@ -67,6 +67,7 @@ export EXPO_PUBLIC_LOOMARR_CLIENT_VERSION="${VERSION_NAME}"
   esac
   CMAKE_BUILD_PARALLEL_LEVEL="${NATIVE_JOBS}" NODE_ENV=production EXPO_TV=1 \
     "${gradle_command[@]}" bundleRelease \
+      --profile \
       --no-daemon \
       --max-workers=1 \
       "-Dorg.gradle.jvmargs=-Xmx${GRADLE_HEAP}" \

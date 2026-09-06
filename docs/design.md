@@ -7221,7 +7221,23 @@ by the reviewed `boringcache/one` distribution
 `c62af42c5c1e29388ceeea77b6a7f1db51f641e7`; its exact resolved version is retained
 with each benchmark. The experiment preserves clean Expo prebuild, all four
 ABIs, worker and memory limits, and every existing bundle verification. It does
-not add a native compiler cache or make additional Gradle tasks cacheable.
+not make additional Gradle tasks cacheable.
+
+**Compiler-cache follow-up (2026-09-06).** A separate benchmark combines the
+Gradle task cache with ccache 4.14 to reuse native C/C++ compilation across clean
+Expo prebuilds. Both providers set the standard CMake C and C++ compiler launchers
+to `ccache` and use content-based compiler identity. The generated Gradle project
+then suppresses React Native's older ccache auto-wrapper, avoiding duplicate
+compiler wrapping and attempts to cache linking. The BoringCache command is
+`boringcache ccache -- make android`, with the existing Gradle adapter inside the
+build script, under one `boringcache ci run` authentication session. Warm runs set
+both adapters read-only. Separate tags preserve the prior Gradle-only comparison;
+four ABIs, memory limits, clean prebuild and artifact gates remain identical.
+Gradle's local `--profile` report records task timings for this comparison.
+ccache's HTTP storage helper is pinned to 0.9. Both providers use Expo's documented
+`pch_defines,time_macros` setting for precompiled headers. Worklets receives
+Clang's `-fno-pch-timestamp` through appended compiler flags, matching the existing
+Expo modules and Reanimated setup without replacing compiler defaults.
 
 **Maintainer-approved client exception (2026-08-23; migration authorized 2026-09-03).** React Native and Expo are approved
 application runtimes for Loomarr's end-user client binaries. They do not replace or duplicate the Go
