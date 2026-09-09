@@ -1,7 +1,7 @@
 // Package suggest is the Suggester (design §8): it turns a channel intent into a
 // grounded proposal (a lineup from the library + an acquisition list of missing
-// titles). It owns the grounding loop — the LLM proposes candidates ONLY via the
-// catalog tool (real ids), every proposal item is re-validated before display,
+// titles). It owns the grounding loop — the LLM proposes names or candidates,
+// but only real ids returned by Catalog operations survive before display,
 // and nothing is auto-executed (§8 human-in-the-loop). Generation runs as a
 // persisted job (§8 execution model); this package is the pure suggestion logic,
 // driven by a worker (Phase 11e) and exposed via the API (Phase 11f).
@@ -31,13 +31,13 @@ type Intent struct {
 	// Refine inputs (§7 refine): a free-text change ("add more Schwarzenegger, drop the
 	// slow ones") plus the channel's CURRENT lineup as context. The prompt renders these
 	// so the model reasons from what's already on the channel and returns a revised
-	// lineup. Context only — new picks are still grounded through the catalog tool, so
+	// lineup. Context only — new picks are still grounded through Catalog operations, so
 	// refine can't invent titles. Empty on a fresh (non-refine) suggestion.
 	RefineText    string          `json:"refineText,omitempty"`
 	CurrentLineup []LineupContext `json:"currentLineup,omitempty"`
 	// Adjacent are pre-seeded candidates from the recommendation graph walked over this
 	// channel's own lineup (programming-design §8.3) — the deterministic second corpus,
-	// merged with whatever the model finds through the catalog tool.
+	// merged with whatever the model finds through the Catalog.
 	//
 	// They are OFFERED, never placed: the model still chooses, and an offered title it
 	// ignores is simply not picked. Grounding is unweakened because these are real
@@ -57,6 +57,14 @@ type Intent struct {
 	referenceEvidence   reference.Evidence
 	referenceKeys       map[provision.Key]bool
 	referenceCandidates []catalog.Candidate
+	// membershipKeys contains only Catalog identities grounded from explicit user or
+	// public-reference title anchors. A model's collection-tool roster is a search
+	// hypothesis: catalog identity verifies that title exists, not that it belongs
+	// to the named set. It is execution-only evidence, never model data.
+	membershipKeys    map[provision.Key]bool
+	membershipSources *membershipSourceState
+	curatedTitleKey   provision.Key
+	curatedTitleSet   bool
 	// DiscoveryScopeID is internal execution context for channel-specific explicit
 	// feedback during re-curation. It never enters the API or persisted intent JSON.
 	DiscoveryScopeID string `json:"-"`
@@ -232,6 +240,8 @@ type RefusedPick struct {
 type Scores struct {
 	ThemeFit          float64 `json:"themeFit"`          // how well items match the intent terms
 	AvailabilityRatio float64 `json:"availabilityRatio"` // in-library / total (live-now readiness)
-	EraBalance        float64 `json:"eraBalance"`        // spread across the target era/years
-	Overall           float64 `json:"overall"`           // weighted composite
+	// EraBalance is nil when a named lineup includes a series whose episode dates
+	// are unavailable; a premiere year or model season selector cannot establish it.
+	EraBalance *float64 `json:"eraBalance"` // spread across the target era/years, when assessed
+	Overall    float64  `json:"overall"`    // weighted composite
 }

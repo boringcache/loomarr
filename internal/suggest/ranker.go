@@ -43,12 +43,14 @@ type rankedCandidates struct {
 // DecisionTrace is bounded, immutable evidence from one original proposal run.
 // Callers receive value copies and must not use it as current channel evidence.
 type DecisionTrace struct {
-	Version       int                 `json:"version"`
-	Candidates    []DecisionCandidate `json:"candidates"`
-	SurfacedTotal int                 `json:"surfacedTotal"`
-	RecordedTotal int                 `json:"recordedTotal"`
-	Truncated     bool                `json:"truncated"`
-	Terminal      string              `json:"terminal,omitempty"`
+	Version                 int                 `json:"version"`
+	Candidates              []DecisionCandidate `json:"candidates"`
+	SurfacedTotal           int                 `json:"surfacedTotal"`
+	RecordedTotal           int                 `json:"recordedTotal"`
+	Truncated               bool                `json:"truncated"`
+	WindowsCompleted        int                 `json:"windowsCompleted,omitempty"`
+	SourceQueriesDispatched int                 `json:"sourceQueriesDispatched,omitempty"`
+	Terminal                string              `json:"terminal,omitempty"`
 }
 
 type DecisionCandidate struct {
@@ -109,8 +111,14 @@ const (
 	ReasonNotSelected            = "not_selected"
 	TerminalProviderFailure      = "provider_failure"
 	TerminalRetrievalFailure     = "retrieval_failure"
+	TerminalReferenceUnreadable  = "reference_unreadable"
 	TerminalGenerationFailure    = "generation_failure"
 	TerminalMalformedExhausted   = "malformed_exhausted"
+	TerminalNamedSetUnproven     = "named_set_unproven"
+	TerminalConstraintsConflict  = "constraints_conflict"
+	TerminalDateSemanticsUnclear = "date_semantics_unclear"
+	TerminalInvalidToolCalls     = "invalid_tool_calls"
+	TerminalProviderTimeout      = "provider_timeout"
 )
 
 func (t DecisionTrace) Clone() DecisionTrace {

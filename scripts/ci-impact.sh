@@ -272,7 +272,15 @@ classify() {
       known=true
       select_gate android
       ;;
-    Dockerfile|LICENSE|THIRD_PARTY_NOTICES.md)
+    Dockerfile)
+      known=true
+      select_gate contracts
+      select_gate go
+      select_gate go_full
+      select_gate image
+      select_gate policy
+      ;;
+    LICENSE|THIRD_PARTY_NOTICES.md)
       known=true
       select_gate contracts
       select_gate image
@@ -372,6 +380,7 @@ classify() {
       case "$path" in
         scripts/agent*) select_gate agent; select_gate policy ;;
         scripts/apple-compilation-cache*) select_gate contracts; select_gate apple_mobile; select_gate apple_tv; select_gate policy ;;
+        scripts/ci-ffmpeg.sh) select_gate contracts; select_gate go; select_gate go_full; select_gate policy ;;
         scripts/ensure-container-image.sh) select_gate contracts; select_gate postgres; select_gate visual; select_gate e2e; select_gate tuner; select_gate policy ;;
         scripts/run-playwright-container.sh) select_gate contracts; select_gate visual; select_gate e2e; select_gate tuner; select_gate policy ;;
         # Android ancestry reuse evaluates intervening paths with this classifier. Until the
@@ -484,6 +493,7 @@ classify() {
     .github/workflows/ci-go.yml)
       known=true
       select_gate go
+      select_gate go_full
       select_gate policy
       ;;
     .github/workflows/ci-postgres.yml)
@@ -504,6 +514,11 @@ classify() {
     .github/workflows/ci-apple-mobile.yml)
       known=true
       select_gate apple_mobile
+      select_gate policy
+      ;;
+    .github/workflows/ci-expo-android-mobile.yml)
+      known=true
+      select_gate expo_android_mobile
       select_gate policy
       ;;
     .github/workflows/ci-apple-tv.yml)

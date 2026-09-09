@@ -190,6 +190,31 @@ RETIRED=(
   'INGEST_MAX_CONCURRENT|V55: ingest concurrency is pipeline-owned implementation policy'
   'filler.starter_collection|V55: starter media is not an operator setting'
   'FILLER_STARTER_COLLECTION|V55: starter media is not an operator setting'
+  # Filler has one publication authority: the certified applied-admission transaction. These
+  # identifiers exposed weaker alternate publishers through scalar confidence, source trust, or
+  # an operator shortcut. Internal holding remains a one-way safety capability; legacy public
+  # lifecycle controls disappear with the quarantined state they existed to repair.
+  'SetClipsHeld|filler publication is not a boolean setter; use HoldClips or the terminal applied-admission transaction'
+  'AutoFilePolicy|classification confidence is diagnostic and cannot publish filler'
+  'WithAutoFile|the tagger enriches metadata; terminal applied admission owns publication'
+  '/v1/filler/file|retired: positive filler publication is the certified applied-admission action'
+  'file-filler-clips|retired with /v1/filler/file'
+  'useFileFillerClips|retired with /v1/filler/file'
+  '/v1/filler/hold|retired: legacy playable rows are quarantined by migration; applied actions own later transitions'
+  'hold-filler-clips|retired with /v1/filler/hold'
+  'useHoldFillerClips|retired with /v1/filler/hold'
+  'recentlyFiled|retired: legacy publications are quarantined, not exposed as a second UI lifecycle'
+  'RecentlyFiled|retired: legacy publications are quarantined, not exposed as a second API lifecycle'
+  'AutoFiledOnly|retired: auto-file has no application meaning after legacy quarantine'
+  'SetFillerSourceAutoAdmit|source provenance cannot grant publication authority'
+  'AdmissionControllable|source controls acquisition, not admission'
+  'filler.autofile.enabled|retired: no confidence-to-publication switch'
+  'filler.autofile.min_confidence|retired: classification confidence is diagnostic'
+  'filler.autofile.normalize_loudness|retired: use filler.conditioning.normalize_loudness'
+  'FILLER_AUTOFILE_ENABLED|retired: no confidence-to-publication switch'
+  'FILLER_AUTOFILE_MIN_CONFIDENCE|retired: classification confidence is diagnostic'
+  'FILLER_AUTOFILE_NORMALIZE_LOUDNESS|retired: use FILLER_CONDITIONING_NORMALIZE_LOUDNESS'
+  'TunePanel|retired: Sources owns acquisition policy; Incoming owns evidence review and terminal decisions'
   '"reconcile.every"|V55: superseded by the active channel and library schedules'
   $'\x60reconcile.every\x60|V55: superseded by the active channel and library schedules'
   'RECONCILE_EVERY=5m|V55: superseded by the active channel and library schedules'
@@ -265,6 +290,16 @@ RETIRED=(
   'io.github.takahirom.roborazzi|P5c: native reference captures replaced the retired JVM screenshot harness'
   'gen-android-tokens.mjs|P5c: no Kotlin token consumer remains'
   'with-shield-sideload-signing|P5b: all React Native release channels use the release-signing plugin'
+	# The detector compatibility partition remains a ledger comparison only. Returning it as the
+	# application partition recreated unattended split materialization whenever certified runtime
+	# wiring was absent.
+	'return legacy, legacy|retired: automatic split materialization requires the certified complete-plan gate'
+  'ProgrammeBoundaryWitness|retired: private scheduled signatures and source clocks own programme qualification'
+  'ProgrammeBoundaryRecorder|retired: producer byte events cannot certify decoded programme identity'
+  'syntheticBoundaryWitness|retired: producer identity subscriptions are replaced by private media truth'
+  'observeProgrammeBoundary|retired: programme qualification uses the signed-HLS signal observer'
+  'observePreparedProgrammeBoundary|retired: playlist discontinuities alone are not programme truth'
+
 )
 # ⚠ `internal/store/migrations/` is exempt, and it is the one exemption that is forced rather than
 # chosen. A migration that CREATES a table names it, and §16 makes applied migrations immutable —
@@ -315,6 +350,19 @@ for row in "${RETIRED[@]}"; do
   if [[ -n "$hits" ]]; then
     fail=1
     printf '\nRETIRED IDENTIFIER STILL REFERENCED: %s\n  %s\n\n' "$id" "$why"
+    printf '%s\n' "$hits" | sed 's/^/    /'
+  fi
+done
+[[ "$fail" -ne 0 ]] && exit 1
+
+# Raw model-tool/prompt schema properties are retired. Persisted/operator era
+# fields remain valid elsewhere, so keep this check limited to these two schema
+# surfaces. Map reads used to reject the property do not restore the schema.
+for path in internal/suggest/tools.go internal/suggest/prompt.go; do
+  hits="$(grep -nF '"era":' "$path" 2>/dev/null || true)"
+  if [[ -n "$hits" ]]; then
+    fail=1
+    printf '\nRETIRED MODEL SCHEMA PROPERTY STILL REFERENCED: "era":\n  %s\n\n' "$path"
     printf '%s\n' "$hits" | sed 's/^/    /'
   fi
 done

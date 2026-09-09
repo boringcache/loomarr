@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,10 +20,14 @@ import (
 	"github.com/loomarr/loomarr/internal/filler"
 	"github.com/loomarr/loomarr/internal/images"
 	"github.com/loomarr/loomarr/internal/store"
+	"github.com/loomarr/loomarr/internal/testkit"
 )
 
 // fakeFiller records sync/tag calls.
 type fakeFiller struct {
+	pullMu     sync.Mutex
+	beforePull func()
+	testkit.FillerAcquisitionPlanner
 	syncs, tags, fetches int
 	fetchedSourceIDs     []string
 	rewinds              []struct {
@@ -164,9 +169,17 @@ func (f *fakeFiller) Ingest(_ context.Context, urls []string) (string, error) {
 	return "job-1", nil
 }
 
-func (f *fakeFiller) IngestPull(_ context.Context, pullID string, targets []filler.AcquisitionTarget) (string, error) {
+func (f *fakeFiller) IngestPull(ctx context.Context, pullID string, targets []filler.AcquisitionTarget, commit func(context.Context, filler.AcquisitionRun) error) (string, error) {
+	if f.beforePull != nil {
+		f.beforePull()
+	}
+	f.pullMu.Lock()
+	defer f.pullMu.Unlock()
 	if f.unavailable {
 		return "", api.ErrIngestUnavailable
+	}
+	if err := commit(ctx, filler.AcquisitionRun{ID: fmt.Sprintf("job-%d", len(f.ingested)+1), PullID: pullID, Trigger: filler.AcquisitionPull, Status: filler.AcquisitionQueued, Requested: len(targets), StartedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}); err != nil {
+		return "", err
 	}
 	f.pullID = pullID
 	f.pullTargets = append([]filler.AcquisitionTarget(nil), targets...)
@@ -230,7 +243,7 @@ func newFillerServerWithConfig(t *testing.T, imageService api.ImageService, live
 	t.Helper()
 	st := openTestStore(t, t.TempDir()+"/f.db")
 	t.Cleanup(func() { _ = st.Close() })
-	ff := &fakeFiller{}
+	ff := &fakeFiller{FillerAcquisitionPlanner: testkit.FillerAcquisitionPlanner{Store: st}}
 	h := api.Router(slog.New(slog.DiscardHandler), api.Options{
 		Store: st,
 		// ⚠ `testAuthorizer`, not `NewTokenAuthorizer(adminToken)`. The production authorizer
@@ -1295,7 +1308,7 @@ func TestListFiller_HeldIsOptInAndLabelled(t *testing.T) {
 	srv, st, _ := newFillerServer(t)
 	seedClip(t, st, "filed", filler.Commercial, 1992, filler.Kids, "cereal")
 	seedClip(t, st, "waiting", filler.Commercial, 1992, filler.Kids, "cereal")
-	if _, err := st.SetClipsHeld(context.Background(), []string{"waiting"}, true, false, time.Now()); err != nil {
+	if _, err := st.HoldClips(context.Background(), []string{"waiting"}, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 

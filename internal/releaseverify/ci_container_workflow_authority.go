@@ -182,7 +182,8 @@ func workflowRunAuthorityEntries() map[string]workflowAuthority {
 		"ci-android.yml": standardRunWorkflow(map[string]workflowStepAuthority{
 			"make fe-install": exactWorkflowStep(5, "", workflowStepAuthority{targets: []string{"fe-install"}, allowsAcquisition: true}),
 			"make fe-codegen": exactWorkflowStep(6, "", workflowStepAuthority{targets: []string{"fe-codegen"}}),
-			"make android": exactWorkflowStep(8, "", workflowStepAuthority{
+			"echo \"gradle-cache-primary-key=android-tv-react-native-v1-${{ runner.os }}-temurin-21-node-${{ env.NODE_VERSION }}-${{ hashFiles('web/apps/tv/**', 'web/packages/**', 'web/pnpm-lock.yaml', 'web/scripts/**') }}-${{ github.sha }}-${{ github.run_id }}\"\necho \"gradle-cache-hit=${{ steps.gradle-cache.outputs.cache-hit == 'true' }}\"\necho \"gradle-cache-source-sha=${GITHUB_SHA}\"\n": exactWorkflowStep(8, "Record Gradle cache provenance", workflowStepAuthority{}),
+			"make android": exactWorkflowStep(9, "", workflowStepAuthority{
 				targets: []string{"android"},
 				environment: map[string]string{
 					"ANDROID_CI_OUTPUT_DIR": "${{ github.workspace }}/.artifacts/android-ci",
@@ -216,6 +217,10 @@ func workflowRunAuthorityEntries() map[string]workflowAuthority {
 					"LOOMARR_APPLE_CACHE_STORE":   "${{ steps.apple-compilation-cache.outputs.store }}",
 				},
 			}),
+		}),
+		"ci-expo-android-mobile.yml": standardRunWorkflow(map[string]workflowStepAuthority{
+			"make fe-install": exactWorkflowStep(5, "", workflowStepAuthority{targets: []string{"fe-install"}, allowsAcquisition: true}),
+			"make client-android-debug CLIENT_APP=mobile": exactWorkflowStep(6, "Generate and build the standalone mobile APK", workflowStepAuthority{targets: []string{"client-android-debug"}}),
 		}),
 		"ci-apple-cache-validation.yml": {
 			environment: standardWorkflowEnvironment(),
@@ -260,7 +265,7 @@ func workflowRunAuthorityEntries() map[string]workflowAuthority {
 			"make observability-verify":     exactWorkflowStep(12, "Observability artifacts are provisionable", workflowStepAuthority{targets: []string{"observability-verify"}, allowsAcquisition: true}),
 		}),
 		"ci-go.yml": standardRunWorkflow(map[string]workflowStepAuthority{
-			"make test GO_SHARD=${{ matrix.shard }}/${{ strategy.job-total }}": exactWorkflowStep(10, "", workflowStepAuthority{targets: []string{"test"}}),
+			"make test GO_SHARD=${{ matrix.shard }}/${{ strategy.job-total }}": exactWorkflowStep(10, "", workflowStepAuthority{targets: []string{"test"}, environment: map[string]string{"GOFLAGS": "-p=1"}}),
 		}),
 		"ci-image-certification.yml": standardRunWorkflow(map[string]workflowStepAuthority{
 			`IMAGE_CERT_REPORT="$RUNNER_TEMP/image-certification.json" make image-cert`: exactWorkflowStep(3, "Certify the release worker against the deterministic real-codec corpus", workflowStepAuthority{targets: []string{"image-cert"}}),

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -66,6 +67,7 @@ type Process struct {
 
 	finishOnce sync.Once
 	ioWG       sync.WaitGroup
+	done       chan struct{}
 
 	log *slog.Logger
 
@@ -112,13 +114,15 @@ func startProcess(
 		}
 	}
 
-	stdout, err := cmd.StdoutPipe()
+	stdout, stdoutWriter, err := newProcessOutputPipe()
 	if err != nil {
 		if stdin != nil {
 			_ = stdin.Close()
 		}
 		return nil, fmt.Errorf("stdout pipe: %w", err)
 	}
+	cmd.Stdout = stdoutWriter
+	defer func() { _ = stdoutWriter.Close() }()
 
 	progress, err := wireProgress(cmd)
 	if err != nil {
@@ -134,7 +138,8 @@ func startProcess(
 	// breaks is the final line.
 	var stderr io.ReadCloser
 	if !progress.combined {
-		stderr, err = cmd.StderrPipe()
+		var stderrWriter *os.File
+		stderr, stderrWriter, err = newProcessOutputPipe()
 		if err != nil {
 			progress.closeFailure()
 			_ = stdout.Close()
@@ -143,9 +148,11 @@ func startProcess(
 			}
 			return nil, fmt.Errorf("stderr pipe: %w", err)
 		}
+		cmd.Stderr = stderrWriter
+		defer func() { _ = stderrWriter.Close() }()
 	}
 
-	p := &Process{Stdout: stdout, Stdin: stdin, log: log}
+	p := &Process{Stdout: stdout, Stdin: stdin, log: log, done: make(chan struct{})}
 	supervised, err := proctree.Start(ctx, cmd)
 	if err != nil {
 		progress.closeFailure()
@@ -160,8 +167,12 @@ func startProcess(
 	}
 	p.proc = supervised
 	if manager != nil {
-		spec.Executable = bin
-		spec.Args = args
+		if spec.Executable == "" {
+			spec.Executable = bin
+		}
+		if len(spec.Args) == 0 {
+			spec.Args = args
+		}
 		p.run = manager.Begin(spec)
 	}
 	if progress.afterStart != nil {
@@ -177,7 +188,49 @@ func startProcess(
 		go func() { defer p.ioWG.Done(); p.readStderr(stderr) }()
 	}
 
+	// proctree owns the OS tree, while Process owns pipe draining and retained
+	// diagnostics. Bind cancellation only after the diagnostic handle and every
+	// reader have been registered: Stop may finish synchronously, and finishOnce
+	// must never observe a nil run or race a later WaitGroup.Add.
+	go func() {
+		select {
+		case <-ctx.Done():
+			p.Stop()
+		case <-p.done:
+		}
+	}()
+
 	return p, nil
+}
+
+// Command-owned StdoutPipe/StderrPipe readers are closed by cmd.Wait, which may
+// run in a lifecycle observer before consumers finish reading a finite child.
+// These readers instead survive reaping and release their descriptors at EOF.
+type processOutputPipe struct {
+	reader *os.File
+	once   sync.Once
+	err    error
+}
+
+func newProcessOutputPipe() (*processOutputPipe, *os.File, error) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		return nil, nil, err
+	}
+	return &processOutputPipe{reader: reader}, writer, nil
+}
+
+func (p *processOutputPipe) Read(b []byte) (int, error) {
+	n, err := p.reader.Read(b)
+	if err == io.EOF {
+		_ = p.Close()
+	}
+	return n, err
+}
+
+func (p *processOutputPipe) Close() error {
+	p.once.Do(func() { p.err = p.reader.Close() })
+	return p.err
 }
 
 // readProgress parses ffmpeg's key=value progress stream.
@@ -387,6 +440,7 @@ func (p *Process) Stop() {
 		return
 	}
 	p.proc.Stop()
+	_ = p.Stdout.Close()
 	p.ioWG.Wait()
 	p.finish(p.proc.Wait())
 }
@@ -413,6 +467,9 @@ func (p *Process) ProcessRunID() string {
 
 func (p *Process) finish(err error) {
 	p.finishOnce.Do(func() {
+		if p.done != nil {
+			close(p.done)
+		}
 		if p.run == nil {
 			return
 		}

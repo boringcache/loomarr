@@ -2,6 +2,7 @@ package playout
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/loomarr/loomarr/internal/diagnostics"
+	"github.com/loomarr/loomarr/internal/testkit/playoutprocessfixture"
 )
 
 func TestCombinedProgressPreservesDiagnostics(t *testing.T) {
@@ -77,6 +79,32 @@ func TestProcessProgressTransport(t *testing.T) {
 	}
 	if got := proc.LastError(); got != "Decoder warning: recovered damaged frame" {
 		t.Errorf("last diagnostic = %q", got)
+	}
+}
+
+func TestProcessWaitPreservesUnreadFiniteOutput(t *testing.T) {
+	for _, mode := range []string{"prepared-success", "prepared-failure"} {
+		t.Run(mode, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			proc, err := Start(ctx, os.Args[0], []string{
+				"-test.run=^TestProcessTreeHelper$", "--", mode,
+			}, nil, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = proc.Stdout.Close() }()
+			// A lifecycle observer can reap a short child before its media consumer
+			// reads the final buffered bytes. Reaping must preserve those bytes.
+			waitErr := proc.Wait()
+			if (waitErr != nil) != (mode == "prepared-failure") {
+				t.Fatalf("natural child exit: %v", waitErr)
+			}
+			got, err := io.ReadAll(proc.Stdout)
+			if err != nil || string(got) != playoutprocessfixture.PreparedPrefix {
+				t.Fatalf("unread finite output after Wait: %q, error: %v", got, err)
+			}
+		})
 	}
 }
 
@@ -158,6 +186,174 @@ func TestStartObservedPersistsProgressStderrAndExit(t *testing.T) {
 	}
 }
 
+func TestStartObservedEarlyCancellationFinishesDiagnostics(t *testing.T) {
+	const attempts = 20
+	for attempt := 0; attempt < attempts; attempt++ {
+		t.Run(strconv.Itoa(attempt), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			registrationBlocked := make(chan struct{})
+			allowRegistration := make(chan struct{})
+			var registrationOnce sync.Once
+			var allowOnce sync.Once
+			unblockRegistration := func() { allowOnce.Do(func() { close(allowRegistration) }) }
+
+			sink := &processDiagnosticsSink{}
+			recorder := diagnostics.New(sink, diagnostics.Options{FlushInterval: time.Millisecond})
+			manager := diagnostics.NewProcessManager(sink, recorder, diagnostics.ProcessOptions{
+				OutputDir: t.TempDir(), FlushInterval: time.Millisecond,
+				Version: func(context.Context, string) string { return "test ffmpeg version" },
+				Now: func() time.Time {
+					registrationOnce.Do(func() {
+						close(registrationBlocked)
+						<-allowRegistration
+					})
+					return time.Now()
+				},
+			})
+			type startResult struct {
+				proc *Process
+				err  error
+			}
+			started := make(chan startResult, 1)
+			var proc *Process
+			go func() {
+				proc, err := StartObserved(ctx, os.Args[0], []string{
+					"-test.run=^TestProcessTreeHelper$", "--", "parent", filepath.Join(t.TempDir(), "child.pid"),
+				}, nil, nil, manager, diagnostics.ProcessSpec{Purpose: "playout_program"})
+				started <- startResult{proc: proc, err: err}
+			}()
+			var cleanupOnce sync.Once
+			var cleanupErr error
+			cleanup := func() error {
+				cleanupOnce.Do(func() {
+					unblockRegistration()
+					cancel()
+					closeCtx, closeCancel := context.WithTimeout(context.Background(), 2*time.Second)
+					defer closeCancel()
+					if proc == nil {
+						select {
+						case result := <-started:
+							proc = result.proc
+							cleanupErr = errors.Join(cleanupErr, result.err)
+						case <-closeCtx.Done():
+							cleanupErr = errors.Join(cleanupErr, errors.New("process startup did not finish during cleanup"))
+						}
+					}
+					if proc != nil {
+						waited := make(chan error, 1)
+						go func() { waited <- proc.Wait() }()
+						select {
+						case err := <-waited:
+							cleanupErr = errors.Join(cleanupErr, err)
+						case <-closeCtx.Done():
+							cleanupErr = errors.Join(cleanupErr, errors.New("process did not stop during cleanup"))
+						}
+					}
+					cleanupErr = errors.Join(cleanupErr, manager.Close(closeCtx))
+					cleanupErr = errors.Join(cleanupErr, recorder.Close(closeCtx))
+				})
+				return cleanupErr
+			}
+			defer func() {
+				if err := cleanup(); err != nil {
+					t.Error(err)
+				}
+			}()
+
+			select {
+			case <-registrationBlocked:
+			case <-time.After(2 * time.Second):
+				t.Fatal("diagnostic registration did not reach the controlled boundary")
+			}
+			// This is an ordinary cancellation while Begin is blocked, not a direct
+			// Stop before StartObserved returns. The loop makes the former ordering's
+			// scheduler race repeatable without changing Context's contract.
+			cancel()
+			time.Sleep(20 * time.Millisecond)
+			unblockRegistration()
+
+			var result startResult
+			select {
+			case result = <-started:
+			case <-time.After(2 * time.Second):
+				t.Fatal("process startup did not return after diagnostic registration")
+			}
+			if result.err != nil {
+				t.Fatal(result.err)
+			}
+			proc = result.proc
+			if err := cleanup(); err != nil {
+				t.Fatal(err)
+			}
+			sink.mu.Lock()
+			defer sink.mu.Unlock()
+			run := sink.runs[result.proc.ProcessRunID()]
+			if run.Status != diagnostics.ProcessCancelled {
+				t.Fatalf("cancelled process diagnostic = %#v, want status %q", run, diagnostics.ProcessCancelled)
+			}
+		})
+	}
+}
+
+func TestStartObservedCancellationFinishesRecordedDiagnostics(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	sink := &processDiagnosticsSink{}
+	recorder := diagnostics.New(sink, diagnostics.Options{FlushInterval: time.Millisecond})
+	manager := diagnostics.NewProcessManager(sink, recorder, diagnostics.ProcessOptions{
+		OutputDir: t.TempDir(), FlushInterval: time.Millisecond,
+		Version: func(context.Context, string) string { return "test ffmpeg version" },
+	})
+	proc, err := StartObserved(ctx, os.Args[0], []string{
+		"-test.run=^TestProcessTreeHelper$", "--", "parent", filepath.Join(t.TempDir(), "child.pid"),
+	}, nil, nil, manager, diagnostics.ProcessSpec{Purpose: "playout_program"})
+	if err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		cancel()
+		proc.Stop()
+		_ = proc.Wait()
+		closeCtx, closeCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer closeCancel()
+		if err := manager.Close(closeCtx); err != nil {
+			t.Error(err)
+		}
+		if err := recorder.Close(closeCtx); err != nil {
+			t.Error(err)
+		}
+	})
+
+	runID := proc.ProcessRunID()
+	waitForObservedRun(t, sink, runID, func(run diagnostics.ProcessRun) bool { return run.ID != "" })
+	cancel()
+	waitForObservedRun(t, sink, runID, func(run diagnostics.ProcessRun) bool {
+		return run.Status == diagnostics.ProcessCancelled
+	})
+}
+
+func waitForObservedRun(t *testing.T, sink *processDiagnosticsSink, runID string, ready func(diagnostics.ProcessRun) bool) {
+	t.Helper()
+	deadline := time.NewTimer(2 * time.Second)
+	defer deadline.Stop()
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		sink.mu.Lock()
+		run := sink.runs[runID]
+		sink.mu.Unlock()
+		if ready(run) {
+			return
+		}
+		select {
+		case <-deadline.C:
+			t.Fatalf("process diagnostic %q did not reach the expected state: %#v", runID, run)
+		case <-tick.C:
+		}
+	}
+}
+
 // TestProcessTreeHelper is re-executed by TestProcessTreeLifecycle. The parent
 // spawns one descendant and waits forever; cancelling the supervised parent must
 // remove both, on Unix through a process group and on Windows through a Job Object.
@@ -167,6 +363,8 @@ func TestProcessTreeHelper(t *testing.T) {
 		return
 	}
 	switch args[0] {
+	case "prepared-success", "prepared-failure", "prepared-stalled":
+		playoutprocessfixture.RunPrepared(args[0])
 	case "parent", "parent-exit":
 		if len(args) != 2 {
 			os.Exit(2)

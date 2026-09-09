@@ -35,11 +35,6 @@ subprojects { subproject ->
                 subproject.android.defaultConfig.externalNativeBuild.cmake.arguments(
                     "-DCCACHE_FOUND=OFF"
                 )
-                if (subproject.name == "react-native-worklets") {
-                    subproject.android.defaultConfig.externalNativeBuild.cmake.cppFlags(
-                        "-Xclang", "-fno-pch-timestamp"
-                    )
-                }
             }
         }
     }

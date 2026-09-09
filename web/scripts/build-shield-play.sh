@@ -57,7 +57,7 @@ export EXPO_PUBLIC_LOOMARR_CLIENT_VERSION="${VERSION_NAME}"
   cd "${APP_DIR}/android"
   case "${LOOMARR_ANDROID_GRADLE_CACHE:-}" in
     "") gradle_command=(./gradlew) ;;
-    gradle) gradle_command=(./gradlew --build-cache) ;;
+    gradle) gradle_command=(./gradlew) ;;
     boringcache) gradle_command=(boringcache gradle -- ./gradlew) ;;
     boringcache-restore) gradle_command=(boringcache gradle --read-only -- ./gradlew) ;;
     *)
@@ -69,6 +69,7 @@ export EXPO_PUBLIC_LOOMARR_CLIENT_VERSION="${VERSION_NAME}"
     "${gradle_command[@]}" bundleRelease \
       --profile \
       --no-daemon \
+      --build-cache \
       --max-workers=1 \
       "-Dorg.gradle.jvmargs=-Xmx${GRADLE_HEAP}" \
       -Pkotlin.compiler.execution.strategy=in-process \

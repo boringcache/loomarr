@@ -34,9 +34,6 @@ test("avoids React Native's duplicate ccache wrapper when a CMake launcher is se
     generated,
     /if \(System\.getenv\("CMAKE_CXX_COMPILER_LAUNCHER"\) == "ccache"\) \{[\s\S]*?"-DCCACHE_FOUND=OFF"/,
   );
-  assert.match(
-    generated,
-    /if \(subproject\.name == "react-native-worklets"\) \{[\s\S]*?cmake\.cppFlags\([\s\S]*?"-Xclang", "-fno-pch-timestamp"/,
-  );
+  assert.doesNotMatch(generated, /fno-pch-timestamp/);
   assert.equal(addMemorySafeAndroidBuild(generated), generated);
 });

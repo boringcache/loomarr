@@ -33,7 +33,7 @@ import (
 //     §9): first materialization/backend switches re-scan the tuner; a desired-only
 //     change refreshes guide data.
 func (e *Engine) Reconcile(ctx context.Context, channelID string) (err error) {
-	return e.reconcile(ctx, channelID, reconcileOptions{})
+	return e.reconcile(ctx, channelID, reconcileOptions{observeProposalQuality: true})
 }
 
 // PrepareInheritedBackend materializes every active channel that inherits the global
@@ -78,8 +78,9 @@ type reconcileOptions struct {
 	// globalBackend is an explicit transition target when inheritedOnly is true.
 	// It stays fixed across CAS retries; ordinary Reconcile deliberately continues
 	// resolving the currently applied backend once per fresh row attempt.
-	globalBackend string
-	inheritedOnly bool
+	globalBackend          string
+	inheritedOnly          bool
+	observeProposalQuality bool
 }
 
 func (e *Engine) reconcile(ctx context.Context, channelID string, opts reconcileOptions) (err error) {
@@ -102,8 +103,30 @@ func (e *Engine) reconcile(ctx context.Context, channelID string, opts reconcile
 	// request to reload and converge from the new truth, not permission to overwrite it.
 	// Keep the retry here, behind the Reconcile seam, so API, sweep and availability
 	// callers cannot accidentally implement different stale-write behaviour.
-	const maxAttempts = 4
 	state := reconcileRun{}
+	defer func() {
+		if !opts.observeProposalQuality || e.quality == nil || !state.qualityEligible {
+			return
+		}
+		duration := e.now().Sub(start)
+		if err != nil {
+			job, qualityErr := e.store.GetJob(ctx, state.qualityJobID)
+			if qualityErr != nil {
+				if e.log != nil {
+					e.log.Warn("recheck Proposal Job scheduling milestone", "err", qualityErr)
+				}
+				return
+			}
+			if job.ReachedLive {
+				return
+			}
+			e.quality.ProposalSchedulingFailed(ctx, state.qualityJobID, e.now(), duration)
+		} else if state.qualityScheduled {
+			e.quality.ProposalScheduled(ctx, state.qualityJobID, e.now(), duration)
+		}
+	}()
+
+	const maxAttempts = 4
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		err = e.reconcileOnce(ctx, channelID, &state, opts)
 		if !errors.Is(err, store.ErrChannelStale) && !errors.Is(err, store.ErrChannelConflict) {
@@ -123,6 +146,9 @@ func (e *Engine) reconcile(ctx context.Context, channelID string, opts reconcile
 type reconcileRun struct {
 	channelAffecting   bool
 	channelListChanged bool
+	qualityEligible    bool
+	qualityScheduled   bool
+	qualityJobID       string
 }
 
 func (e *Engine) reconcileOnce(
@@ -138,6 +164,22 @@ func (e *Engine) reconcileOnce(
 	}
 	if !ch.Status.Reconcilable() {
 		return nil // detached = no longer managed (§9 ownership); paused = deliberately off the sweep
+	}
+	if opts.observeProposalQuality {
+		run.qualityEligible = false
+		run.qualityScheduled = false
+		run.qualityJobID = ""
+		if ch.IntentRef != "" {
+			job, qualityErr := e.store.GetJob(ctx, ch.IntentRef)
+			if qualityErr != nil {
+				if e.log != nil {
+					e.log.Warn("read Proposal Job scheduling milestone", "err", qualityErr)
+				}
+			} else if !job.ReachedLive {
+				run.qualityEligible = true
+				run.qualityJobID = ch.IntentRef
+			}
+		}
 	}
 	if opts.inheritedOnly && schedule.HasExplicitPlayoutBackend(ch.Policy) {
 		return nil // a concurrent operator pin wins over a fleet-default transition
@@ -342,6 +384,9 @@ func (e *Engine) reconcileOnce(
 		return fmt.Errorf("persist channel %s: %w", channelID, err)
 	}
 	ch = committed
+	if run.qualityEligible && (ch.Status == schedule.StatusLive || ch.Status == schedule.StatusDrifted) {
+		run.qualityScheduled = true
+	}
 	// A shared encoder is reading the previously accepted cycle until it is retired.
 	// Guide freshness alone cannot switch its current playout session: live proof was a
 	// newly constrained Simpsons guide advertising S10 while the Shield reattached to a
@@ -514,7 +559,7 @@ func (e *Engine) healEntry(ctx context.Context) func(*schedule.LineupEntry) {
 // its own, the two would drift and the UI would confidently show pods the reconciler
 // never builds — the whole failure mode preview exists to prevent.
 func SelectionForChannel(ch store.Channel) filler.Selection {
-	sel := SelectionFrom(ch.Policy.Filler, ch.Policy.Scope.Era)
+	sel := SelectionFrom(ch.Policy.Filler, ch.Policy.Scope)
 	if ch.Policy.BreakDuration != nil {
 		sel.BreakDurationMs = ch.Policy.BreakDuration.Std().Milliseconds()
 	}
@@ -574,15 +619,15 @@ func BreakDurationFor(pol schedule.ChannelPolicy, global time.Duration) time.Dur
 // working the instant "explicitly any era" exists: a fallback keyed on `Era == 0` cannot tell an
 // unset era from a chosen one, so it would overwrite the operator's answer with the channel's.
 // One writer, called from every derivation, is the only version of this that stays true.
-func SelectionFrom(f *schedule.FillerSelection, scopeEra *schedule.Range) filler.Selection {
+func SelectionFrom(f *schedule.FillerSelection, scope schedule.ScopePolicy) filler.Selection {
 	sel := filler.Selection{}
 	inheritEra := true
 	if f != nil {
 		sel.Audience = filler.Audience(f.Audience)
-		sel.Categories = f.Categories
-		sel.Kinds = f.Kinds
-		sel.Pinned = f.Pinned
-		sel.Excluded = f.Excluded
+		sel.Categories = append([]string(nil), f.Categories...)
+		sel.Kinds = append([]string(nil), f.Kinds...)
+		sel.Pinned = append([]string(nil), f.Pinned...)
+		sel.Excluded = append([]string(nil), f.Excluded...)
 		if f.Geography != nil {
 			sel.Geography = filler.Geography{Country: f.Geography.Country, Market: f.Geography.Market}.Normalize()
 		}
@@ -595,14 +640,29 @@ func SelectionFrom(f *schedule.FillerSelection, scopeEra *schedule.Range) filler
 			// from the whole catalog". Same pattern as `AutoCurate`, for the same reason.
 			inheritEra = false
 			sel.Era = filler.EraRange{From: f.Era.From, To: f.Era.To}
+		} else if len(f.EraWindows) > 0 {
+			inheritEra = false
+			sel.EraWindows = rangesToFiller(f.EraWindows)
 		}
 	}
 	// The "seed filler era from scope.era" default, applied live rather than only stamped at
 	// create — so an existing channel benefits, and a channel whose scope later changes follows.
-	if inheritEra && scopeEra != nil {
-		sel.Era = filler.EraRange{From: scopeEra.From, To: scopeEra.To}
+	if inheritEra {
+		if windows := scope.FillerEraWindows(); len(windows) > 0 {
+			sel.EraWindows = rangesToFiller(windows)
+		} else if scope.Era != nil {
+			sel.Era = filler.EraRange{From: scope.Era.From, To: scope.Era.To}
+		}
 	}
 	return sel
+}
+
+func rangesToFiller(ranges []schedule.Range) []filler.EraRange {
+	out := make([]filler.EraRange, len(ranges))
+	for i, r := range ranges {
+		out[i] = filler.EraRange{From: r.From, To: r.To}
+	}
+	return filler.NormalizeEraWindows(out)
 }
 
 // PodSeed derives a deterministic pod seed from the channel id (§10 seeded-

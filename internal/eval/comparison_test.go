@@ -115,4 +115,42 @@ func TestComparePlannerModelsRejectsDifferentMetricContracts(t *testing.T) {
 	if _, err := ComparePlannerModels([]Scorecard{first, second}); err == nil || !strings.Contains(err.Error(), "frozen certification identity") {
 		t.Fatalf("different resource budget error = %v", err)
 	}
+	first, second = card("gemma"), card("qwen")
+	first.Profile, second.Profile = "bounded-v1", "bounded-v2"
+	if _, err := ComparePlannerModels([]Scorecard{first, second}); err == nil || !strings.Contains(err.Error(), "frozen certification identity") {
+		t.Fatalf("different budget profile error = %v", err)
+	}
+	first, second = card("gemma"), card("qwen")
+	first.SchemaVersion, second.SchemaVersion = 11, 11
+	if _, err := ComparePlannerModels([]Scorecard{first, second}); err != nil {
+		t.Fatalf("archived schema-v11 comparison error = %v", err)
+	}
+	second.SchemaVersion = 12
+	if _, err := ComparePlannerModels([]Scorecard{first, second}); err == nil || !strings.Contains(err.Error(), "frozen certification identity") {
+		t.Fatalf("mixed schema-v11/v12 comparison error = %v", err)
+	}
+	first.SchemaVersion = 12
+	if _, err := ComparePlannerModels([]Scorecard{first, second}); err == nil || !strings.Contains(err.Error(), "lacks its run snapshot") {
+		t.Fatalf("missing schema-v12 snapshot error = %v", err)
+	}
+}
+
+func TestComparePlannerModelsRejectsHistoricalScorecardsForCurrentContract(t *testing.T) {
+	selection := CertificationSelection{QualityMargin: 0.02, Weights: CertificationQualityWeights{
+		GroundedCompletion: 0.20, CorrectToolOperation: 0.20, SchemaValidity: 0.10,
+		PolicyAccuracy: 0.15, ProposalQuality: 0.25, Recovery: 0.10,
+	}}
+	card := func(corpusVersion string) Scorecard {
+		return Scorecard{
+			SchemaVersion: 10, CorpusVersion: corpusVersion, Certified: true,
+			Generator: ModelIdentity{Provider: "ollama", Model: corpusVersion},
+			Contract: &CertificationContract{CorpusVersion: corpusVersion, CatalogFixtureSHA256: "fixture",
+				PromptVersion: "prompt", ToolSchemaVersion: "tool", ScorerVersion: "scorer", Selection: selection},
+			Assessment: &CertificationAssessment{Passed: true, GroundedCompletionRate: 1, CorrectToolOperationRate: 1,
+				SchemaValidityRate: 1, PolicyAccuracyRate: 1, ProposalQualityRate: 1, RecoveryRate: 1},
+		}
+	}
+	if _, err := ComparePlannerModels([]Scorecard{card("planner-certification-v6"), card("planner-certification-v7")}); err == nil || !strings.Contains(err.Error(), "frozen certification identity") {
+		t.Fatalf("mixed historical/current comparison error = %v", err)
+	}
 }

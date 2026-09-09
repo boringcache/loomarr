@@ -135,8 +135,8 @@ has no drift guard, so churning it is real risk for no glossary gain. The banned
 for the artifact; `internal/suggest` remains the package that produces one.
 
 **Grounding**:
-The rule that the model may only pick from candidates a tool call actually returned this run.
-An id the catalog never surfaced cannot enter a Proposal (§8).
+The rule that the model may only pick from candidates a Catalog operation actually returned this
+run. An id the catalog never surfaced cannot enter a Proposal (§8).
 _Avoid_: validation, filtering
 
 **The approval gate**:
@@ -241,6 +241,11 @@ _Avoid_: appropriateness (too vague), safety (an overclaim), admission (the larg
 A closed, evidence-backed description of content relevant to Airworthiness, such as explicit
 nudity or hateful language. It is an observation, not the policy verdict that consumes it.
 _Avoid_: warning, rating, rejection reason
+
+**Audience profile**:
+A named policy that maps complete Suitability flags and context to an Airworthiness verdict for a
+class of viewers, such as all-ages or general-audience. It is not a claim about what the content is.
+_Avoid_: rating, safety level, maturity score
 
 ### Delivery
 

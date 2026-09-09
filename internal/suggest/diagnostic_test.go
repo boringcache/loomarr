@@ -18,7 +18,7 @@ func (p *diagnosticProvider) Chat(_ context.Context, messages []llm.Message, opt
 	p.messages = append([]llm.Message(nil), messages...)
 	p.opts = opts
 	return llm.Response{
-		Content:     `{"channelName":"Signal Cinema","rationale":"Grounded science fiction.","picks":[{"mediaType":"movie","tmdbId":603,"name":"The Matrix","rationale":"A grounded science-fiction match.","confidence":0.98}],"policy":{"genres":{"include":["Science Fiction"]}}}`,
+		Content:     `{"channelName":"Signal Cinema","rationale":"Grounded science fiction.","picks":[{"mediaType":"movie","tmdbId":603,"name":"The Matrix","rationale":"A grounded science-fiction match.","confidence":0.98}],"policy":{"genres":{"include":["Science Fiction"]}},"dateMeaning":{"kind":"none","anchors":[],"axes":[]}}`,
 		Attribution: llm.Attribution{RequestedProvider: "diagnostic", RequestedModel: "fixture-model", Charge: &llm.Money{Amount: "0.001", Currency: "USD"}},
 	}, nil
 }
@@ -29,16 +29,16 @@ func TestRunToolFinalizationDiagnosticUsesFrozenPostResultContract(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.PromptVersion != "suggester-prompt-v4" || report.ToolSchemaVersion != "catalog-search-v4" || report.MessageTemplateVersion != "planner-tool-result-finalization-v1" {
+	if report.PromptVersion != "suggester-prompt-v6" || report.ToolSchemaVersion != "catalog-search-v6" || report.MessageTemplateVersion != "planner-tool-result-finalization-v2" {
 		t.Fatalf("contract identity = %+v", report)
 	}
 	if len(report.SystemPromptSHA256) != 64 || len(report.UserPromptSHA256) != 64 || len(report.MessagesSHA256) != 64 || len(report.ToolSchemaSHA256) != 64 {
 		t.Fatalf("diagnostic hashes = system %q user %q messages %q tool %q", report.SystemPromptSHA256, report.UserPromptSHA256, report.MessagesSHA256, report.ToolSchemaSHA256)
 	}
-	if report.SystemPromptSHA256 != "3666d0f134076eb0d294d1b962e1b52194edfaa073677d38c0e9590c1d28dd13" ||
+	if report.SystemPromptSHA256 != "c768256ed12b50fc19ff2b6c523e8bf331a587ba66c734aecbaa5c50ab1f21a2" ||
 		report.UserPromptSHA256 != "37f435b49e8c33fa43f3452f2a6bf7c761e2012facec6d1a93378db8891d48cc" ||
-		report.MessagesSHA256 != "66053a9efec7dc808a67cac8772b4ec2cb27415f0c7a6398d58fa32543e03415" ||
-		report.ToolSchemaSHA256 != "876af81bcb942b55c5a2f3df2bafa540edaa7124b9d6a01e90505fcd46d8548e" {
+		report.MessagesSHA256 != "44dab2d65615043fdc2ecc67ae287aebd9a1e18a5a980f7532045a97ba0af53f" ||
+		report.ToolSchemaSHA256 != "595a6ec8416fc9b0cf438cc86897006d69f5f2fcf6de238c0e310e8de8273f86" {
 		t.Fatalf("frozen diagnostic identity drifted without a version change: %+v", report)
 	}
 	if got, want := report.MessageRoles, []string{"system", "user", "assistant", "tool"}; !equalStrings(got, want) {

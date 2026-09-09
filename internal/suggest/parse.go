@@ -18,6 +18,7 @@ type pick struct {
 	TMDBID     int     `json:"tmdbId"`
 	TVDBID     int     `json:"tvdbId"`
 	Name       string  `json:"name"`
+	Year       int     `json:"year"`
 	Rationale  string  `json:"rationale"`
 	Confidence float64 `json:"confidence"`
 	// SeasonMin/SeasonMax: an OPTIONAL airing season window the model proposes for a
@@ -91,6 +92,16 @@ type finalOutput struct {
 	Rationale   string      `json:"rationale"`
 	Picks       []pick      `json:"picks"`
 	Policy      *pickPolicy `json:"policy,omitempty"`
+	// DateMeaning is deliberately separate from policy.  Policy is a proposal the
+	// model may get wrong; date interpretation is a grounded claim about the
+	// submitted Intent and is validated before it can affect retrieval or scope.
+	DateMeaning *DateMeaning `json:"dateMeaning"`
+
+	// nameGroundingIncomplete is private provenance from direct-final name
+	// grounding. It records that at least one submitted pick was not carried to
+	// the proposal grounding chokepoint, so a later membership rejection cannot
+	// explain an otherwise mixed empty result as membership-only.
+	nameGroundingIncomplete bool
 }
 
 // parsePicks parses the model's final JSON. A malformed final output is an error
@@ -104,9 +115,23 @@ type finalOutput struct {
 // surfaced-map chokepoint downstream is the actual grounding gate.
 func parsePicks(content string) (finalOutput, error) {
 	var out finalOutput
-	if err := json.Unmarshal([]byte(extractJSONObject(content)), &out); err != nil {
+	blob := []byte(extractJSONObject(content))
+	if err := json.Unmarshal(blob, &out); err != nil {
 		return finalOutput{}, fmt.Errorf("suggester: model final output is not valid JSON: %w", err)
 	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(blob, &fields); err != nil {
+		return finalOutput{}, fmt.Errorf("suggester: model final output is not an object: %w", err)
+	}
+	rawMeaning, ok := fields["dateMeaning"]
+	if !ok {
+		return finalOutput{}, fmt.Errorf("suggester: dateMeaning is required")
+	}
+	meaning, err := decodeDateMeaning(rawMeaning)
+	if err != nil {
+		return finalOutput{}, fmt.Errorf("suggester: dateMeaning: %w", err)
+	}
+	out.DateMeaning = &meaning
 	return out, nil
 }
 

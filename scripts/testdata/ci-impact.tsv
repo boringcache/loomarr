@@ -49,7 +49,7 @@ android-source-validator	scripts/validate-android-release-source.sh	android,poli
 android-artifact-downloader	scripts/download-android-ci-artifact.sh	android,policy
 android-artifact-signer	scripts/sign-android-ci-artifact.sh	android,policy
 android-emulator-acceptance	scripts/test-android-release-emulator.sh	android
-release-image	Dockerfile	contracts,image
+release-image	Dockerfile	contracts,go,go_full,image,policy
 observability-bundle	observability/metrics-manifest.txt	contracts
 documentation	docs/dev/testing.md	docs
 design-contract	docs/design.md	docs,policy
@@ -64,7 +64,7 @@ agent-script	scripts/agent.sh	agent,policy
 release-workflow	.github/workflows/release.yml	policy
 ci-workflow	.github/workflows/ci.yml	policy
 ci-agent-workflow	.github/workflows/ci-agent.yml	agent,policy
-ci-go-workflow	.github/workflows/ci-go.yml	go,policy
+ci-go-workflow	.github/workflows/ci-go.yml	go,go_full,policy
 ci-rust-workflow	.github/workflows/ci-rust-contracts.yml	rust,policy
 ci-rust-certification-workflow	.github/workflows/ci-image-certification.yml	rust,policy
 ci-go-contracts-workflow	.github/workflows/ci-go-contracts.yml	contracts,policy
@@ -72,6 +72,7 @@ ci-postgres-workflow	.github/workflows/ci-postgres.yml	postgres,policy
 ci-frontend-workflow	.github/workflows/ci-frontend.yml	web,policy
 ci-clients-workflow	.github/workflows/ci-clients.yml	clients,policy
 ci-apple-mobile-workflow	.github/workflows/ci-apple-mobile.yml	apple_mobile,policy
+ci-expo-android-mobile-workflow	.github/workflows/ci-expo-android-mobile.yml	expo_android_mobile,policy
 ci-apple-tv-workflow	.github/workflows/ci-apple-tv.yml	apple_tv,policy
 ci-apple-cache-validation-workflow	.github/workflows/ci-apple-cache-validation.yml	apple_mobile,apple_tv,policy
 apple-compilation-cache-publisher	.github/workflows/apple-compilation-cache.yml	apple_mobile,apple_tv,policy
@@ -106,3 +107,4 @@ filler-pilot-review	internal/fillercorpus/pilotreview.go	contracts,go,postgres,i
 filler-pilot-review-command	cmd/filler-corpus-pilot-rights-review/main.go;cmd/filler-corpus-pilot-rights-lock/main.go	contracts,go,postgres,image
 filler-eval-doc	internal/fillereval/README.md	docs
 android-benchmark-cache	.boringcache.toml	android,policy
+ci-ffmpeg-toolchain	scripts/ci-ffmpeg.sh	contracts,go,go_full,policy
