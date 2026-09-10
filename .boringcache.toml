@@ -26,7 +26,7 @@ tag = "golangci"
 path = "~/.cache/golangci-lint"
 
 [profiles.cargo-dependencies]
-entries = ["cargo-registry-cache", "cargo-registry-index", "cargo-git-db"]
+entries = ["cargo-registry-cache", "cargo-registry-index"]
 
 [profiles.cargo]
 entries = ["cargo-target"]
@@ -35,7 +35,7 @@ entries = ["cargo-target"]
 entries = ["go-mod-cache", "ffmpeg"]
 
 [profiles.go-contracts]
-entries = ["go-mod-cache", "golangci"]
+entries = ["go-mod-cache", "go-build-cache", "golangci"]
 
 [profiles.android]
 entries = ["pnpm", "gradle-wrapper", "gradle-dependencies"]
