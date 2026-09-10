@@ -6,12 +6,15 @@ The dedicated workspace is `boringcache/loomarr`, with a 20 GB cleanup budget.
 No static cache tokens are configured. Pull requests and merge-queue jobs restore
 only; trusted seed and rolling jobs publish. The warm dispatch is restore-only.
 
+OIDC enrollment completed in run 34472686200. The workflow is manually dispatched;
+use `phase=connect` only when a new CI connection is needed.
+
 ## Workloads
 
 | Workload | Cache surface | Preserved checks |
 | --- | --- | --- |
-| Go contracts and three test shards | Native Go cache plus module/tool download archives | Lint, policy, race rules, package partition and real test execution |
-| Rust contracts and image certification | Cargo target snapshots, registry/git archives, sccache 0.17.0 | Pinned Rust 1.93.0, fmt, Clippy, tests and real-codec certification |
+| Go contracts and three test shards | Go tool cache for tests; persistent Go build archive for contracts; module/tool download archives | Lint, policy, race rules, package partition and real test execution |
+| Rust contracts and image certification | Cargo target snapshots, registry archives, sccache 0.17.0 | Pinned Rust 1.93.0, fmt, Clippy, tests and real-codec certification |
 | Frontend | pnpm download store | Two test shards, type checks, builds and generated-token checks |
 | Android TV and mobile | Gradle task cache, ccache 4.14, dependency archives | Clean Expo prebuild, native compiler checks, four TV ABIs, unsigned bundle verification and mobile APK |
 | Docker amd64 and arm64 | Layers, Go and sccache tool caches, pnpm and Cargo registry mounts | Native architectures, all Dockerfile proofs and packaged license/notice verification |
@@ -20,6 +23,23 @@ The Dockerfile's Rust build still uses the checked-in Rust toolchain. Go uses
 1.27.0; Node uses 22.23.2; Java uses Temurin 21.0.12+1. The One distribution is
 `404b744a2053da4cf963f13f615f7fafe94f3cf7` (v1.30.1); leave `cli_version` empty to
 use its released default. An explicit value is a canary, not a comparison default.
+
+## Compatibility findings from the first seed
+
+The released Go helper removes its exported files when its process exits.
+`golangci-lint` then fails when loading an export path returned by a completed Go
+process. The contracts job uses BoringCache's persistent Go build archive so its
+existing lint and policy checks run unchanged. Go test shards and Docker keep the
+Go tool-cache adapter. This is a BoringCache compatibility finding, not evidence
+of an upstream Loomarr cache defect.
+
+Loomarr has no Cargo Git dependencies, so its archive profile contains only the
+registry cache and index. Strict save errors remain enabled. The ccache HTTP
+helper is verified by its release checksum and installed executable; invoking
+its unsupported `--version` option exits with an error.
+
+The first seed attempt is retained as run 34473472188. It populated some cache
+entries before failing, so subsequent seed attempts are not globally cold.
 
 ## Replay protocol
 
