@@ -25,6 +25,9 @@ path = "~/.cache/loomarr-ffmpeg"
 tag = "golangci"
 path = "~/.cache/golangci-lint"
 
+[entries.go-build-cache]
+path = "~/.cache/loomarr-go-contracts"
+
 [profiles.cargo-dependencies]
 entries = ["cargo-registry-cache", "cargo-registry-index"]
 
