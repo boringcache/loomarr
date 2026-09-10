@@ -10223,44 +10223,28 @@ The rule this encodes: **a claim about behaviour belongs next to a test, or it b
 
 ## 14. Technology stack (decided)
 
-**Fork benchmark experiment (2026-09-05).** The optional
-`LOOMARR_ANDROID_GRADLE_CACHE` build setting compares Gradle task-output caching
-(`gradle`) with BoringCache's remote Gradle adapter (`boringcache`). The default
-build is unchanged; `boringcache-restore` makes the warm benchmark read-only.
-This build-only dependency uses the released CLI selected
-by the reviewed `boringcache/one` distribution
-`c62af42c5c1e29388ceeea77b6a7f1db51f641e7`; its exact resolved version is retained
-with each benchmark. The experiment preserves clean Expo prebuild, all four
-ABIs, worker and memory limits, and every existing bundle verification. It does
-not make additional Gradle tasks cacheable.
+**Fork cache validation (2026-09-10).** The `boringcache-validation` branch uses
+BoringCache One v1.30.1 at distribution commit
+`404b744a2053da4cf963f13f615f7fafe94f3cf7` and its released default CLI.
+`.boringcache.toml` owns the dedicated `boringcache/loomarr` workspace, cache paths,
+profiles and tags. GitHub OIDC grants the fork short-lived workspace access;
+trusted validation runs publish and pull requests and warm consumers restore only.
 
-**Compiler-cache follow-up (2026-09-06).** A separate benchmark combines the
-Gradle task cache with ccache 4.14 to reuse native C/C++ compilation across clean
-Expo prebuilds. Both providers set the standard CMake C and C++ compiler launchers
-to `ccache` and use content-based compiler identity. The generated Gradle project
-then suppresses React Native's older ccache auto-wrapper, avoiding duplicate
-compiler wrapping and attempts to cache linking. The BoringCache command is
-`boringcache ccache -- make android`, with the existing Gradle adapter inside the
-build script, under one `boringcache ci run` authentication session. Warm runs set
-both adapters read-only. Separate tags preserve the prior Gradle-only comparison;
-four ABIs, memory limits, clean prebuild and artifact gates remain identical.
-Gradle's local `--profile` report records task timings for this comparison.
-ccache's HTTP storage helper is pinned to 0.9.
+Cargo uses typed target snapshots, registry/git downloads and sccache 0.17.0.
+The existing Make targets select the public Cargo adapter through `CARGO`.
+Go uses its native cache protocol, with dependency downloads archived separately.
+Android uses Gradle's remote task cache and ccache 4.14 with HTTP helper 0.9;
+compiler identity is content-based and sloppiness is empty. When CMake's compiler
+launcher is selected, the Expo plugin disables React Native's duplicate wrapper.
+Clean prebuild, all four TV ABIs, worker/heap limits, real tests, unsigned-artifact
+checks and the ephemeral sign-only round trip remain required.
 
-**Current-main validation (2026-09-09).** The fork includes accepted upstream
-`e56f2166386a93734b0a4a0cf88639ec7c219e54`, preserving its default Gradle
-`--build-cache` behavior. The new comparison pins BoringCache CLI v1.30.1 and
-ccache 4.14, acquired from versioned releases; ccache's archive must match SHA-256
-`45a91165db7092e67c6208ada03f54700e684c4cd3735f9031de95669ed9272c`.
-Both backends explicitly clear `CCACHE_SLOPPINESS` and use compiler-content
-identity. The earlier experiment's `pch_defines,time_macros` setting and added
-Worklets timestamp flag are removed: ccache may decline precompiled-header calls
-whose validity it cannot establish. Generated compiler and linker commands,
-cache statistics, memory samples, profiles, and verified unsigned AABs are retained.
-The one/two-native-worker baseline uses no compiler cache; cache comparisons keep
-one native worker and one Gradle worker at the same fork source. Fresh cache scopes
-separate each cold seed and its two warm trials from historical runs. This does
-not validate protected signing, promotion, publication, or device playback.
+Docker uses layer caching plus native Go and sccache backends. The pnpm store and
+Cargo registry cache mounts persist between builds. sccache is installed only in
+the Rust build stage, with architecture-specific release checksums. The native
+amd64/arm64 matrix, packaged metadata checks and all Dockerfile build proofs remain.
+The validation workflow loads images locally and does not publish releases.
+The replay plan and its limitations are in `.github/boringcache-validation.md`.
 
 **Maintainer-approved client exception (2026-08-23; migration authorized 2026-09-03).** React Native and Expo are approved
 application runtimes for Loomarr's end-user client binaries. They do not replace or duplicate the Go

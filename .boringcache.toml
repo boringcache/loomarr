@@ -1,15 +1,71 @@
-workspace = "boringcache/benchmarks"
+workspace = "boringcache/loomarr"
 
-[proxy]
-metadata-hints = ["project=loomarr"]
+[entries.cargo-target]
+kind = "cargo-target"
+tag = "cargo-target"
+path = "target"
+
+[entries.pnpm]
+tag = "pnpm"
+path = "~/.local/share/pnpm/store"
+
+[entries.gradle-wrapper]
+tag = "gradle-wrapper"
+path = "~/.gradle/wrapper"
+
+[entries.gradle-dependencies]
+tag = "gradle-dependencies"
+path = "~/.gradle/caches/modules-2"
+
+[entries.ffmpeg]
+tag = "ffmpeg"
+path = "~/.cache/loomarr-ffmpeg"
+
+[entries.golangci]
+tag = "golangci"
+path = "~/.cache/golangci-lint"
+
+[profiles.cargo-dependencies]
+entries = ["cargo-registry-cache", "cargo-registry-index", "cargo-git-db"]
+
+[profiles.cargo]
+entries = ["cargo-target"]
+
+[profiles.go]
+entries = ["go-mod-cache", "ffmpeg"]
+
+[profiles.go-contracts]
+entries = ["go-mod-cache", "golangci"]
+
+[profiles.android]
+entries = ["pnpm", "gradle-wrapper", "gradle-dependencies"]
+
+[profiles.frontend]
+entries = ["pnpm"]
+
+[adapters.cargo]
+profiles = ["cargo"]
+compiler-cache = "sccache"
+fail-on-cache-error = true
+
+[adapters.sccache]
+tag = "rust"
+
+[adapters.go]
+tag = "go"
+fail-on-cache-error = true
 
 [adapters.gradle]
-tag = "loomarr-compiler-gradle-20260906"
+tag = "android-gradle"
 fail-on-cache-error = true
-metadata-hints = ["tool=gradle", "lane=android-play"]
 
 [adapters.ccache]
-tag = "loomarr-compiler-ccache-20260906"
-command = ["make", "android"]
+tag = "android-ccache"
 fail-on-cache-error = true
-metadata-hints = ["tool=ccache", "lane=android-play"]
+
+[adapters.docker]
+command = ["docker", "buildx", "build", "--load", "--tag", "loomarr-ci:verify", "."]
+tag = "docker"
+mount-cache = true
+tool-cache = ["go:docker-go", "sccache:docker-rust"]
+fail-on-cache-error = true

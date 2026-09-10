@@ -20,9 +20,10 @@ on:
           - full
           - apple-cache-validation
 
-# Least privilege: CI only reads the repo.
+# CI reads the repository and obtains a short-lived cache identity.
 permissions:
   contents: read
+  id-token: write
 
 # A newer push to the same ref cancels the older in-flight run.
 #

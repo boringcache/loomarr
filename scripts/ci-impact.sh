@@ -73,9 +73,16 @@ classify() {
   fi
 
   case "$path" in
-    .boringcache.toml)
+    .boringcache.toml|.github/actions/boringcache-*/*|.github/boringcache-upstream|.github/workflows/boringcache-validation.yml)
       known=true
+      select_gate contracts
+      select_gate go
+      select_gate go_full
+      select_gate rust
+      select_gate web
+      select_gate expo_android_mobile
       select_gate android
+      select_gate image
       select_gate policy
       ;;
     Cargo.toml|Cargo.lock|rust-toolchain.toml|deny.toml|rust/*)
@@ -470,6 +477,10 @@ classify() {
     Makefile)
       known=true
       select_all
+      ;;
+    .github/boringcache-validation.md|.github/boringcache-replay.tsv)
+      known=true
+      select_gate docs
       ;;
     .github/workflows/ci.yml)
       known=true

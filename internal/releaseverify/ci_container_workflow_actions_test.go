@@ -132,7 +132,7 @@ func TestVerifyCIContainerDownloadsBindsPinnedActionShapeAndContext(t *testing.T
 		},
 		"build action changes inputs": func(_ *testing.T, _ *yaml.Node, steps []*yaml.Node) []*yaml.Node {
 			with, _ := mappingValue(steps[2], "with")
-			tags, _ := mappingValue(with, "tags")
+			tags, _ := mappingValue(with, "mode")
 			tags.Value = "attacker.invalid/image:pinned"
 			return steps
 		},

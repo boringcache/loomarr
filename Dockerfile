@@ -56,11 +56,25 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
 # Required image renderer (§14, §22). Build natively for each Buildx target so the bundled
 # libwebp and Rust standard library always match the runtime architecture.
 FROM rust:1.98-bookworm@sha256:82150a52ec202c1b14d7817e14516c392bb7f5cfebd88f1ed531cb37ebd39922 AS image-worker
+ARG SCCACHE_VERSION=0.17.0
+RUN set -eu; \
+    case "$(uname -m)" in \
+      x86_64) checksum=67c4a96dd237c1f518f6b36083f270f9976d516f1e57fce891755ea782e50006 ;; \
+      aarch64) checksum=821a86343191aa1cbab74bd42f9e93c9a63bf85e4742945f40d3ae84193c1c77 ;; \
+      *) echo "Unsupported build architecture"; exit 1 ;; \
+    esac; \
+    archive="sccache-v${SCCACHE_VERSION}-$(uname -m)-unknown-linux-musl"; \
+    curl --fail --location --silent --show-error --retry 5 --retry-delay 2 --retry-all-errors --retry-max-time 600 --connect-timeout 20 --max-time 300 "https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/${archive}.tar.gz" -o /tmp/sccache.tar.gz; \
+    printf '%s  /tmp/sccache.tar.gz\n' "$checksum" | sha256sum --check -; \
+    tar -xzf /tmp/sccache.tar.gz -C /tmp; \
+    install -m 755 "/tmp/${archive}/sccache" /usr/local/bin/sccache; \
+    rm -rf /tmp/sccache.tar.gz "/tmp/${archive}"
 WORKDIR /src
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY rust ./rust
 ARG VERSION=""
-RUN LOOMARR_RELEASE="${VERSION:-dev}" cargo build --release --locked -p loomarr-image
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    LOOMARR_RELEASE="${VERSION:-dev}" cargo build --release --locked -p loomarr-image
 
 # ---- runtime ----------------------------------------------------------------
 # THE image. One tag, one release unit, all required binaries and tooling (§16 — revised).

@@ -18,7 +18,7 @@ type workflowAuthorityRegistry struct {
 }
 
 func workflowAuthorityCatalog() workflowAuthorityRegistry {
-	return workflowAuthorityRegistry{
+	catalog := workflowAuthorityRegistry{
 		topology:        workflowTopologyAuthorityEntries(),
 		runs:            workflowRunAuthorityEntries(),
 		actions:         workflowActionAuthorityEntries(),
@@ -26,6 +26,8 @@ func workflowAuthorityCatalog() workflowAuthorityRegistry {
 		reusableCallers: reusableWorkflowCallerAuthorityEntries(),
 		familyWorkflows: ciFamilyWorkflowAuthorities(),
 	}
+	applyCacheWorkflowAuthorities(&catalog)
+	return catalog
 }
 
 func verifyWorkflowAuthorityCatalog(catalog workflowAuthorityRegistry) error {

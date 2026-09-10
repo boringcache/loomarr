@@ -82,18 +82,8 @@ fi
 gradle_status=0
 (
   cd "${APP_DIR}/android"
-  case "${LOOMARR_ANDROID_GRADLE_CACHE:-}" in
-    "") gradle_command=(./gradlew) ;;
-    gradle) gradle_command=(./gradlew) ;;
-    boringcache) gradle_command=(boringcache gradle -- ./gradlew) ;;
-    boringcache-restore) gradle_command=(boringcache gradle --read-only -- ./gradlew) ;;
-    *)
-      printf 'unsupported Android Gradle cache mode: %s\n' "${LOOMARR_ANDROID_GRADLE_CACHE}" >&2
-      exit 2
-      ;;
-  esac
   CMAKE_BUILD_PARALLEL_LEVEL="${NATIVE_JOBS}" NODE_ENV=production EXPO_TV=1 \
-    "${gradle_command[@]}" "${gradle_args[@]}"
+    ./gradlew "${gradle_args[@]}"
 ) || gradle_status=$?
 if [[ -n "${ANDROID_BUILD_PROFILE_DIR:-}" && -d "${APP_DIR}/android/build/reports/profile" ]]; then
   cp -R "${APP_DIR}/android/build/reports/profile" "${ANDROID_BUILD_PROFILE_DIR}/gradle"

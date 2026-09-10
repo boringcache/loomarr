@@ -2,18 +2,28 @@ name: CI / Go tests
 
 on:
   workflow_call:
+    inputs:
+      cache_access:
+        description: Cache access for the validation run
+        type: string
+        default: auto
+      cli_version:
+        description: Optional exact CLI canary release
+        type: string
+        default: ''
 
 permissions:
   contents: read
+  id-token: write
 
 env:
-  GO_VERSION: "1.27"
-  NODE_VERSION: "22"
+  GO_VERSION: "1.27.0"
+  NODE_VERSION: "22.23.2"
 
 jobs:
   run:
     name: Go — race-policy tests (${{ matrix.shard }}/${{ strategy.job-total }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # This job is test-only. Repository-wide contracts run once in `go-contracts`, in parallel;
     # repeating Rust, lint, vet, harness, cross-compilation, and release checks in every shard spent
     # runner time and inflated each shard's cache without adding assurance.
@@ -40,82 +50,61 @@ jobs:
         shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Record source and runner identity
+        shell: bash
+        run: |
+          git rev-parse HEAD
+          cat .github/boringcache-upstream
+          git status --short
+          lscpu
+          sha256sum go.sum Cargo.lock rust-toolchain.toml web/pnpm-lock.yaml
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: ${{ env.GO_VERSION }}
-          # ⚠ DELIBERATELY OFF — the step below owns every Go cache path in this job.
-          # `cache: true` caches `~/go/pkg/mod` AND `~/.cache/go-build` keyed on go.sum,
-          # which is the SAME `~/.cache/go-build` the unified cache rolls. Both on meant
-          # restoring it twice and, whenever go.sum moved, SAVING it twice: measured
-          # 2026-08-09, `Post Cache golangci` 83s ran alongside `Post Run actions/setup-go`
-          # 91s in one job. Worse, setup-go's half is keyed on go.sum alone — exactly the
-          # frozen-key bug the note below exists to prevent — so it re-froze a slice of the
-          # very cache the rolling key was added to keep fresh.
           cache: false
-      # `make test` builds the real debug image worker its Go tests execute. Install the pinned
-      # toolchain but deliberately do not cache Cargo/target here: the old combined cache reached
-      # 1.36GB and cost longer to restore/save than this focused build. Static Rust checks and
-      # release certification still run once in `go-contracts`.
       - name: Install pinned Rust toolchain
         run: rustup toolchain install 1.93.0 --profile minimal
-      # Each test shard keeps only its Go module and compiler caches. Lint and static Rust checks
-      # run in `go-contracts`, so restoring their caches here would spend time and storage on
-      # inputs this job never reads.
-      #
-      # ⚠ THE KEY MUST BE UNIQUE PER RUN, and this is not a style choice. `actions/cache`
-      # NEVER overwrites an existing key — it skips the save when the key already hit. This
-      # path holds `~/.cache/go-build`, whose contents track `.go` SOURCE, but the key used
-      # to be `hashFiles('go.sum')`: so the entry was written once and then frozen while the
-      # source moved under it. Measured — one 473MB entry created 2026-07-31T01:06 was still
-      # being restored days and many source changes later, so `go test -race` recompiled
-      # nearly everything on every run (~224s of the job). `github.run_id` guarantees a miss
-      # on the exact key so the save always happens, while `restore-keys` still restores the
-      # newest prior cache to compile against.
-      #
-      # ⚠ AND A ROLLING KEY MUST BE BOUNDED — the other half of the same trade, and the
-      # failure mode the fix above created. A stable key never re-SAVES; a rolling key never
-      # PRUNES. Neither actions/cache mode evicts anything, so this entry grew purely by
-      # accretion: every run restored the previous one, added to it, and saved the union.
-      # Measured 2026-08-09 it had reached **1.36 GB**, costing 85s to restore (74s of that
-      # spent EXTRACTING, not downloading) plus 83–122s to save — ~168s of a ~10 min job
-      # spent moving a tarball before a single test ran.
-      #
-      # The ISO week in the key is the bound. It rotates on its own, so there is no number
-      # for anyone to remember to bump — this repo has been bitten repeatedly by
-      # hand-maintained lists that drift — and it costs exactly one cold build per week. It
-      # is in the restore-keys prefixes too, deliberately: a prefix that outlived the epoch
-      # would restore the very accumulation the epoch exists to drop.
-      - name: Cache epoch (bounds rolling-cache growth)
-        id: epoch
-        run: echo "week=$(date -u +%GW%V)" >> "$GITHUB_OUTPUT"
-      - name: Restore Go test caches (modules + build)
-        id: gocache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      - uses: taiki-e/install-action@c44f6b046f1c29ae5918b1e0bfdbb2f1813836fd # v2.84.1
         with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          # ⚠ THE SHARD IS PART OF THE KEY. Each shard compiles a DIFFERENT set of packages, so
-          # a shared key would have them overwrite each other's build objects every run — each
-          # shard restoring a cache built for the other's packages and recompiling its own.
-          # It also makes the save well-defined: without it both shards race to write one key
-          # and whichever lost simply skipped, so half the objects were never cached at all.
-          key: go-test-${{ runner.os }}-${{ steps.epoch.outputs.week }}-s${{ matrix.shard }}-${{ hashFiles('go.sum') }}-${{ github.run_id }}
-          restore-keys: |
-            go-test-${{ runner.os }}-${{ steps.epoch.outputs.week }}-s${{ matrix.shard }}-${{ hashFiles('go.sum') }}-
-            go-test-${{ runner.os }}-${{ steps.epoch.outputs.week }}-s${{ matrix.shard }}-
+          tool: sccache@0.17.0
+      - uses: boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7 # v1.30.1
+        with:
+          cli-version: ${{ inputs.cli_version }}
+          mode: archive
+          cache-profiles: cargo-dependencies
+          trust-policy: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group' || inputs.cache_access == 'restore') && 'restore' || 'auto' }}
+          fail-on-cache-error: true
+      - name: Use the Cargo adapter in Make targets
+        shell: bash
+        env:
+          CACHE_ACCESS: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group' || inputs.cache_access == 'restore') && 'restore' || 'auto' }}
+        run: |
+          if [[ "$CACHE_ACCESS" == restore ]]; then
+            echo 'CARGO=boringcache cargo --read-only' >> "$GITHUB_ENV"
+          else
+            echo 'CARGO=boringcache cargo --write' >> "$GITHUB_ENV"
+          fi
+      - name: BoringCache Go dependencies and FFmpeg
+        uses: boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7 # v1.30.1
+        with:
+          cli-version: ${{ inputs.cli_version }}
+          mode: archive
+          cache-profiles: go
+          trust-policy: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group' || inputs.cache_access == 'restore') && 'restore' || 'auto' }}
+          fail-on-cache-error: true
+      - name: BoringCache go
+        uses: boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7 # v1.30.1
+        with:
+          cli-version: ${{ inputs.cli_version }}
+          mode: go
+          trust-policy: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group' || inputs.cache_access == 'restore') && 'restore' || 'auto' }}
+          fail-on-cache-error: true
       # Exercise the deployed media toolchain. Distribution FFmpeg versions have different
       # MPEG-TS startup latency; both executables must match the production image's pins.
       # Cache the immutable archive by digest and verify every hit before extraction.
       - name: Resolve production FFmpeg pin
         id: ffmpeg-pin
         run: ./scripts/ci-ffmpeg.sh metadata >> "$GITHUB_OUTPUT"
-      - name: Cache production FFmpeg archive
-        id: ffmpeg-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: ~/.cache/loomarr-ffmpeg
-          key: ffmpeg-${{ runner.os }}-${{ runner.arch }}-${{ steps.ffmpeg-pin.outputs.sha256 }}
       - name: Download production FFmpeg
         run: ./scripts/ci-ffmpeg.sh download "$HOME/.cache/loomarr-ffmpeg"
       - name: Install production FFmpeg
@@ -133,21 +122,3 @@ jobs:
         # while asserting strict media latency. Retain race and shard coverage.
         env:
           GOFLAGS: -p=1
-      # ⚠ SAVE ONLY ON main, which is why this is cache/save rather than the round-trip
-      # `actions/cache`. A PR's cache is scoped to `refs/pull/N/merge` and can never be
-      # restored again once that PR closes — cache reads are scoped to the branch and its
-      # base — so every PR save wrote ~1.4GB that only ever became eviction pressure on the
-      # caches that ARE read. That is the same 10GB-quota burn `cache-cleanup.yml` exists to
-      # mop up after; not creating the garbage beats deleting it. PRs restore from main's
-      # entry and skip the measured 83–122s save outright.
-      #
-      # `always()` so a RED gate still refreshes the build objects it already produced — the
-      # next run should not recompile from cold merely because an assertion failed.
-      - name: Save Go caches (main only)
-        if: always() && github.ref == 'refs/heads/main'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: ${{ steps.gocache.outputs.cache-primary-key }}

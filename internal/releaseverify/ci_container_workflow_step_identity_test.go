@@ -93,7 +93,7 @@ func TestVerifyCIContainerDownloadsBindsRequiredAuthoritiesToAbsoluteWorkflowSte
 		"remove pinned action before image route": {
 			workflow: "ci-image.yml",
 			mutate: func(t *testing.T, steps []*yaml.Node) []*yaml.Node {
-				return removeWorkflowStep(steps, workflowUsesStepIndex(t, steps, "docker/setup-buildx-action"))
+				return removeWorkflowStep(steps, workflowUsesStepIndex(t, steps, "boringcache/one"))
 			},
 		},
 		"move Playwright route across cache action": {
