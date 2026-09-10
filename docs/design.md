@@ -10098,9 +10098,12 @@ BoringCache One v1.30.1 at distribution commit
 profiles and tags. GitHub OIDC grants the fork short-lived workspace access;
 trusted validation runs publish and pull requests and warm consumers restore only.
 
-Cargo uses typed target snapshots, registry/git downloads and sccache 0.17.0.
+Cargo uses typed target snapshots, registry downloads and sccache 0.17.0.
 The existing Make targets select the public Cargo adapter through `CARGO`.
-Go uses its native cache protocol, with dependency downloads archived separately.
+Go tests use the native cache protocol, with dependency downloads archived separately.
+Go contracts use a persistent build archive in `~/.cache/loomarr-go-contracts`;
+the built-in entry exports `GOCACHE` to that directory. This preserves exported
+files for golangci-lint and avoids the runner's pre-populated default cache.
 Android uses Gradle's remote task cache and ccache 4.14 with HTTP helper 0.9;
 compiler identity is content-based and sloppiness is empty. When CMake's compiler
 launcher is selected, the Expo plugin disables React Native's duplicate wrapper.

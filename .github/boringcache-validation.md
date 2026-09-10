@@ -40,6 +40,13 @@ its unsupported `--version` option exits with an error.
 
 The first seed attempt is retained as run 34473472188. It populated some cache
 entries before failing, so subsequent seed attempts are not globally cold.
+Seed attempt 2 passed all twelve workload jobs in run 34475264359.
+
+The first restore-only warm attempt, run 34478953595, exposed a pre-populated
+`~/.cache/go-build` directory on the runner. Strict archive restore refused to
+overwrite it. The contracts entry now uses `~/.cache/loomarr-go-contracts` and
+exports that location through `GOCACHE`. Seed and warm are repeated at the same
+commit after this correction; the failed warm attempt remains in the evidence.
 
 ## Replay protocol
 

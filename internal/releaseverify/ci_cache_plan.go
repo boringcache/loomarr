@@ -14,7 +14,7 @@ func verifyCacheWorkflowPlan(root string) error {
 	if err != nil {
 		return fmt.Errorf("read cache workflow plan: %w", err)
 	}
-	if fmt.Sprintf("%x", sha256.Sum256(contents)) != "4a9d56f17f936d793cb62da183b6043d37f87fc55e5f5faca66d3c1886358939" {
+	if fmt.Sprintf("%x", sha256.Sum256(contents)) != "82edf37d366f7915e194408ac8ba8461bd33560a2cf89c5402cb03dbf8b17dc0" {
 		return fmt.Errorf("cache workflow plan differs from its reviewed command and storage authority")
 	}
 	return nil
