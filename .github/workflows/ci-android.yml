@@ -2,45 +2,88 @@ name: CI / Android TV — React Native Play bundle
 
 on:
   workflow_call:
+    inputs:
+      cache_access:
+        description: Cache access for the validation run
+        type: string
+        default: auto
+      cli_version:
+        description: Optional exact CLI canary release
+        type: string
+        default: ''
 
 permissions:
   contents: read
+  id-token: write
 
 env:
-  GO_VERSION: "1.27"
-  NODE_VERSION: "22"
+  GO_VERSION: "1.27.0"
+  NODE_VERSION: "22.23.2"
 
 jobs:
   run:
     name: Android TV — React Native Play bundle
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Record source and runner identity
+        shell: bash
+        run: |
+          git rev-parse HEAD
+          cat .github/boringcache-upstream
+          git status --short
+          lscpu
+          sha256sum go.sum Cargo.lock rust-toolchain.toml web/pnpm-lock.yaml
       - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           distribution: temurin
-          java-version: "21"
+          java-version: "21.0.12+1"
       - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: "22"
+          node-version: "22.23.2"
       - run: corepack enable
+      - name: Install native cache tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://github.com/ccache/ccache/releases/download/v4.14/ccache-4.14-linux-x86_64-glibc.tar.gz -o "$RUNNER_TEMP/ccache.tar.gz"
+          echo "c64760b0b85ba86068f4cd162dc42e2dc39c6f46b0cb8c1990dfccbec7a1fed0  $RUNNER_TEMP/ccache.tar.gz" | sha256sum --check -
+          tar -xzf "$RUNNER_TEMP/ccache.tar.gz" -C "$RUNNER_TEMP"
+          sudo install -m 755 "$RUNNER_TEMP/ccache-4.14-linux-x86_64-glibc/ccache" /usr/local/bin/ccache
+          curl -fsSL https://github.com/ccache/ccache-storage-http-go/releases/download/v0.9/ccache-storage-http-go-0.9-linux-amd64.tar.gz -o "$RUNNER_TEMP/ccache-http.tar.gz"
+          echo "875dbf6d575d06e4c4492f1ba639beb68530bc23382031a6bacc767cded9f463  $RUNNER_TEMP/ccache-http.tar.gz" | sha256sum --check -
+          tar -xzf "$RUNNER_TEMP/ccache-http.tar.gz" -C "$RUNNER_TEMP"
+          sudo install -m 755 "$RUNNER_TEMP/ccache-storage-http-go-0.9-linux-amd64/ccache-storage-http" /usr/local/bin/ccache-storage-http
+          ccache --version
+          ccache-storage-http --version
+          {
+            echo 'CCACHE_COMPILERCHECK=content'
+            echo 'CCACHE_SLOPPINESS='
+            echo 'CMAKE_C_COMPILER_LAUNCHER=ccache'
+            echo 'CMAKE_CXX_COMPILER_LAUNCHER=ccache'
+          } >> "$GITHUB_ENV"
+      - uses: boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7 # v1.30.1
+        with:
+          cli-version: ${{ inputs.cli_version }}
+          mode: archive
+          cache-profiles: android
+          trust-policy: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group' || inputs.cache_access == 'restore') && 'restore' || 'auto' }}
+          fail-on-cache-error: true
+      - uses: boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7 # v1.30.1
+        with:
+          cli-version: ${{ inputs.cli_version }}
+          mode: gradle
+          trust-policy: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group' || inputs.cache_access == 'restore') && 'restore' || 'auto' }}
+          fail-on-cache-error: true
+      - uses: boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7 # v1.30.1
+        with:
+          cli-version: ${{ inputs.cli_version }}
+          mode: ccache
+          trust-policy: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group' || inputs.cache_access == 'restore') && 'restore' || 'auto' }}
+          fail-on-cache-error: true
       - run: make fe-install
       - run: make fe-codegen
-      - name: Cache Gradle
-        id: gradle-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: android-tv-react-native-v1-${{ runner.os }}-temurin-21-node-${{ env.NODE_VERSION }}-${{ hashFiles('web/apps/tv/**', 'web/packages/**', 'web/pnpm-lock.yaml', 'web/scripts/**') }}-${{ github.sha }}-${{ github.run_id }}
-          restore-keys: android-tv-react-native-v1-${{ runner.os }}-temurin-21-node-${{ env.NODE_VERSION }}-${{ hashFiles('web/apps/tv/**', 'web/packages/**', 'web/pnpm-lock.yaml', 'web/scripts/**') }}-${{ github.sha }}-
-      - name: Record Gradle cache provenance
-        run: |
-          echo "gradle-cache-primary-key=android-tv-react-native-v1-${{ runner.os }}-temurin-21-node-${{ env.NODE_VERSION }}-${{ hashFiles('web/apps/tv/**', 'web/packages/**', 'web/pnpm-lock.yaml', 'web/scripts/**') }}-${{ github.sha }}-${{ github.run_id }}"
-          echo "gradle-cache-hit=${{ steps.gradle-cache.outputs.cache-hit == 'true' }}"
-          echo "gradle-cache-source-sha=${GITHUB_SHA}"
       - name: Build and profile the verified four-ABI bundle
         id: android
         run: make android-profile

@@ -1,0 +1,6 @@
+seed	7c461430294d24fecfaac040edb979e22c4fd2fc	Defer raw startup performance to beta.7 (#1178)
+rolling-1	667b778c4eea15ddb743210954b44aec46d85009	Ground named-block discovery and restore planner release replay (#1179)
+rolling-2	38ed1123597f8d7a757a9172aedaa17299ac1ac2	Qualify declared playout profiles through production preparation (#1171)
+rolling-3	0a5283d9af4b75ecb28576584dc44d47445b275e	Repair planner provider schemas and evaluation accounting (#1180)
+rolling-4	4dcd3c90c35085840bab0441e3e39ce3e2d7b117	Make planner finalization explicit and preserve accepted date state (#1181)
+rolling-5	c5f5acff2bc9cd76796a8a1f620066e5fb60e437	Clarify reference interpretation and bind grounded sampling (#1182)

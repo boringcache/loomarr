@@ -20,6 +20,9 @@ func playwrightContainerTargets() []string {
 // the bounded helper before product tests start, while one reviewed source owns
 // each pinned image name.
 func VerifyCIContainerDownloads(root string) error {
+	if err := verifyCacheWorkflowPlan(root); err != nil {
+		return err
+	}
 	if err := verifyRepositoryMakeExecutionEnvironment(root); err != nil {
 		return fmt.Errorf("ci Make execution environment: %w", err)
 	}

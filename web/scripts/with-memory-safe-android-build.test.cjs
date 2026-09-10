@@ -26,3 +26,14 @@ test("fails closed when Expo's generated root build shape changes", () => {
     /Could not find Android allprojects/,
   );
 });
+
+test("avoids React Native's duplicate ccache wrapper when a CMake launcher is selected", () => {
+  const generated = addMemorySafeAndroidBuild("allprojects {\n}\n");
+
+  assert.match(
+    generated,
+    /if \(System\.getenv\("CMAKE_CXX_COMPILER_LAUNCHER"\) == "ccache"\) \{[\s\S]*?"-DCCACHE_FOUND=OFF"/,
+  );
+  assert.doesNotMatch(generated, /fno-pch-timestamp/);
+  assert.equal(addMemorySafeAndroidBuild(generated), generated);
+});

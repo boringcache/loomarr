@@ -189,6 +189,7 @@ test-pg: rust-dev-build ensure-postgres-test-image
 	TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX=docker.io TESTCONTAINERS_RYUK_DISABLED=false $(GO) test -p=1 -race -tags=integration -timeout=20m ./internal/store/ ./internal/backendtransition/ ./internal/app/
 `)
 	_, source, _, _ := runtime.Caller(0)
+	writeFixtureFile(t, filepath.Join(root, ".boringcache.toml"), readFixtureFile(t, filepath.Join(filepath.Dir(source), "..", "..", ".boringcache.toml")))
 	workflowEntries, err := os.ReadDir(filepath.Join(filepath.Dir(source), "..", "..", ".github", "workflows"))
 	if err != nil {
 		t.Fatal(err)

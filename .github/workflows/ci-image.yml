@@ -2,13 +2,23 @@ name: CI / Image
 
 on:
   workflow_call:
+    inputs:
+      cache_access:
+        description: Cache access for the validation run
+        type: string
+        default: auto
+      cli_version:
+        description: Optional exact CLI canary release
+        type: string
+        default: ''
 
 permissions:
   contents: read
+  id-token: write
 
 env:
-  GO_VERSION: "1.27"
-  NODE_VERSION: "22"
+  GO_VERSION: "1.27.0"
+  NODE_VERSION: "22.23.2"
 
 jobs:
   run:
@@ -32,34 +42,21 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
-      # BOTH matrix entries are required because the bug this job exists for was arch-specific
-      # and release.yml publishes both. Load the one native image without pushing it: the
-      # Dockerfile's own build-time proofs run inside it, then the next step inspects the actual
-      # runtime filesystem and OCI labels rather than trusting Dockerfile prose.
-      #
-      # ⚠ READ the release cache but never write a CI copy. release.yml owns that multi-platform
-      # cache and refreshes it only after publishing a real image. The former `image-ci` scope was
-      # never written anywhere, despite the comment claiming this job consumed the release cache.
-      - name: Build (${{ matrix.platform }})
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+      - name: Record source and runner identity
+        shell: bash
+        run: |
+          git rev-parse HEAD
+          cat .github/boringcache-upstream
+          git status --short
+          lscpu
+          sha256sum go.sum Cargo.lock rust-toolchain.toml web/pnpm-lock.yaml
+      - name: BoringCache docker
+        uses: boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7 # v1.30.1
         with:
-          context: .
-          platforms: ${{ matrix.platform }}
-          push: false
-          load: true
-          tags: loomarr-ci:verify
-          # ⚠ READ-ONLY cache, deliberately: there is `cache-from` and NO `cache-to`.
-          # Measured — exporting it cost 462s of a 770s job, MORE than the 303s the arm64
-          # layer it was caching takes to build, because `mode=max` ships every
-          # intermediate layer including the 466MB whisper model. It also spends the 10GB
-          # repo cache quota on ~2GB per run, evicting the Go and pnpm caches that do pay
-          # for themselves.
-          #
-          # It still READS anything release.yml populates, so this is not "no caching" —
-          # it is declining to pay the export cost on every PR. Dockerfile and Rust changes
-          # invalidate only their affected layers; unchanged release layers remain reusable.
-          cache-from: type=gha,scope=release
+          cli-version: ${{ inputs.cli_version }}
+          mode: docker
+          trust-policy: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group' || inputs.cache_access == 'restore') && 'restore' || 'auto' }}
+          fail-on-cache-error: true
 
       - name: Inspect packaged license and notice metadata
         shell: bash

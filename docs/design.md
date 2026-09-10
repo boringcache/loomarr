@@ -10091,6 +10091,29 @@ The rule this encodes: **a claim about behaviour belongs next to a test, or it b
 
 ## 14. Technology stack (decided)
 
+**Fork cache validation (2026-09-10).** The `boringcache-validation` branch uses
+BoringCache One v1.30.1 at distribution commit
+`404b744a2053da4cf963f13f615f7fafe94f3cf7` and its released default CLI.
+`.boringcache.toml` owns the dedicated `boringcache/loomarr` workspace, cache paths,
+profiles and tags. GitHub OIDC grants the fork short-lived workspace access;
+trusted validation runs publish and pull requests and warm consumers restore only.
+
+Cargo uses typed target snapshots, registry/git downloads and sccache 0.17.0.
+The existing Make targets select the public Cargo adapter through `CARGO`.
+Go uses its native cache protocol, with dependency downloads archived separately.
+Android uses Gradle's remote task cache and ccache 4.14 with HTTP helper 0.9;
+compiler identity is content-based and sloppiness is empty. When CMake's compiler
+launcher is selected, the Expo plugin disables React Native's duplicate wrapper.
+Clean prebuild, all four TV ABIs, worker/heap limits, real tests, unsigned-artifact
+checks and the ephemeral sign-only round trip remain required.
+
+Docker uses layer caching plus native Go and sccache backends. The pnpm store and
+Cargo registry cache mounts persist between builds. sccache is installed only in
+the Rust build stage, with architecture-specific release checksums. The native
+amd64/arm64 matrix, packaged metadata checks and all Dockerfile build proofs remain.
+The validation workflow loads images locally and does not publish releases.
+The replay plan and its limitations are in `.github/boringcache-validation.md`.
+
 **Maintainer-approved client exception (2026-08-23; migration authorized 2026-09-03).** React Native and Expo are approved
 application runtimes for Loomarr's end-user client binaries. They do not replace or duplicate the Go
 server, scheduler, authorization, playout, or domain logic. The P3.5 shared-interface proof is

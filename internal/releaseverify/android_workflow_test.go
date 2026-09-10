@@ -69,17 +69,18 @@ func TestCIAndroidGradleCachePolicy(t *testing.T) {
 	workflow := string(data)
 
 	for _, want := range []string{
-		"id: gradle-cache",
-		"path: |\n            ~/.gradle/caches\n            ~/.gradle/wrapper",
-		"key: android-tv-react-native-v1-${{ runner.os }}-temurin-21-node-${{ env.NODE_VERSION }}-${{ hashFiles('web/apps/tv/**', 'web/packages/**', 'web/pnpm-lock.yaml', 'web/scripts/**') }}-${{ github.sha }}-${{ github.run_id }}",
-		"restore-keys: android-tv-react-native-v1-${{ runner.os }}-temurin-21-node-${{ env.NODE_VERSION }}-${{ hashFiles('web/apps/tv/**', 'web/packages/**', 'web/pnpm-lock.yaml', 'web/scripts/**') }}-${{ github.sha }}-",
-		"- name: Record Gradle cache provenance",
-		"gradle-cache-primary-key=android-tv-react-native-v1-${{ runner.os }}-temurin-21-node-${{ env.NODE_VERSION }}-${{ hashFiles('web/apps/tv/**', 'web/packages/**', 'web/pnpm-lock.yaml', 'web/scripts/**') }}-${{ github.sha }}-${{ github.run_id }}",
-		"gradle-cache-hit=${{ steps.gradle-cache.outputs.cache-hit == 'true' }}",
-		"gradle-cache-source-sha=${GITHUB_SHA}",
+		"id-token: write",
+		"boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7",
+		"mode: gradle",
+		"mode: ccache",
+		"cache-profiles: android",
+		"inputs.cache_access == 'restore'",
+		"CCACHE_COMPILERCHECK=content",
+		"CCACHE_SLOPPINESS=",
+		"run: make android-profile",
 	} {
 		if !strings.Contains(workflow, want) {
-			t.Errorf("ci-android Gradle cache policy missing %q", want)
+			t.Errorf("ci-android cache policy missing %q", want)
 		}
 	}
 	for _, forbidden := range []string{

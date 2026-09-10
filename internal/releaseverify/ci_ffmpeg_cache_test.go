@@ -171,10 +171,10 @@ func TestCIFFmpegWorkflowUsesVerifiedPair(t *testing.T) {
 	}
 	steps := mappingValueMust(t, workflowJobNode(t, document.Content[0], "run"), "steps")
 	commands := map[int]string{
-		5: `./scripts/ci-ffmpeg.sh metadata >> "$GITHUB_OUTPUT"`,
-		7: `./scripts/ci-ffmpeg.sh download "$HOME/.cache/loomarr-ffmpeg"`,
-		8: "./scripts/ci-ffmpeg.sh install \"$HOME/.cache/loomarr-ffmpeg\" \"$RUNNER_TEMP/loomarr-ffmpeg\"\necho \"$RUNNER_TEMP/loomarr-ffmpeg\" >> \"$GITHUB_PATH\"",
-		9: "test \"$(command -v ffmpeg)\" = \"$RUNNER_TEMP/loomarr-ffmpeg/ffmpeg\"\ntest \"$(command -v ffprobe)\" = \"$RUNNER_TEMP/loomarr-ffmpeg/ffprobe\"\nffmpeg -version\nffprobe -version",
+		9:  `./scripts/ci-ffmpeg.sh metadata >> "$GITHUB_OUTPUT"`,
+		10: `./scripts/ci-ffmpeg.sh download "$HOME/.cache/loomarr-ffmpeg"`,
+		11: "./scripts/ci-ffmpeg.sh install \"$HOME/.cache/loomarr-ffmpeg\" \"$RUNNER_TEMP/loomarr-ffmpeg\"\necho \"$RUNNER_TEMP/loomarr-ffmpeg\" >> \"$GITHUB_PATH\"",
+		12: "test \"$(command -v ffmpeg)\" = \"$RUNNER_TEMP/loomarr-ffmpeg/ffmpeg\"\ntest \"$(command -v ffprobe)\" = \"$RUNNER_TEMP/loomarr-ffmpeg/ffprobe\"\nffmpeg -version\nffprobe -version",
 	}
 	for index, want := range commands {
 		if index >= len(steps.Content) {
