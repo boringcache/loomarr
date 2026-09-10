@@ -2,6 +2,7 @@ import type { ApproveOutputBody, MeBody, ProposalDTO } from "@loomarr/api";
 import {
   getApproveProposalMockHandler,
   getGetProposalJobMockHandler,
+  getGetProposalOutlookMockHandler,
   getMeMockHandler,
   getSubmitProposalMockHandler,
 } from "@loomarr/api/msw";
@@ -10,6 +11,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { outlook } from "@/test/fixtures/outlook";
 import { me } from "@/test/fixtures/users";
 import { server } from "@/test/msw/server";
 import { RouterHarness } from "@/test/story-utils";
@@ -75,7 +77,20 @@ const PROPOSAL: ProposalDTO = {
     // panel renders ProposalReview, which reads `scores` for the fit summary — so the review was
     // being exercised against a proposal the server could not have produced.
     alternates: [],
-    scores: { themeFit: 0.9, availabilityRatio: 1, eraBalance: 0.7, overall: 0.85 },
+    scores: {
+      version: 1,
+      themeFit: 1,
+      availabilityRatio: 1,
+      eraBalance: null,
+      theme: {
+        status: "supported",
+        basis: "qualifiers",
+        assessedItems: 2,
+        unknownItems: 0,
+        qualifiers: [{ term: "action", supportedItems: 2 }],
+      },
+      era: { status: "not_requested", assessedItems: 0, matchingItems: 0, unknownItems: 0 },
+    },
     rationale: "Grounded against your library.",
     trace: { version: 1, surfacedTotal: 0, recordedTotal: 0, truncated: false, candidates: [] },
   },
@@ -151,6 +166,17 @@ const renderPanel = (onCreated: (id: string) => void) => {
 
 describe("ChannelSuggestPanel", () => {
   beforeEach(() => {
+    server.use(
+      getGetProposalOutlookMockHandler(
+        outlook({
+          state: "uncertain",
+          unknownTitles: 1,
+          programs: 0,
+          uniqueRuntimeMs: 0,
+          firstRepeatMs: null,
+        }),
+      ),
+    );
     runOverride = undefined; // default every test back to the real hook
     window.sessionStorage.clear();
   });
@@ -230,6 +256,30 @@ describe("ChannelSuggestPanel", () => {
 
     // The reused ProposalReview renders the lineup — no navigation away from the panel.
     expect(await screen.findByText("Ferris Bueller's Day Off")).toBeInTheDocument();
+  });
+
+  it("editing a landed request preserves its intent and performs no approval", async () => {
+    const user = userEvent.setup();
+    const { approvals, submissions } = stubSuggest({ proposals: [PROPOSAL] });
+    renderPanel(() => {});
+    await user.type(await screen.findByLabelText("Channel intent"), "80s teen comedies");
+    await user.click(screen.getByRole("button", { name: /suggest a lineup/i }));
+    await user.click(await screen.findByRole("button", { name: "Edit request" }));
+    expect(await screen.findByLabelText("Channel intent")).toHaveValue("80s teen comedies");
+    expect(approvals).toEqual([]);
+    expect(submissions).toHaveLength(1);
+  });
+
+  it("thin outlook opens the preserved request without approving", async () => {
+    const user = userEvent.setup();
+    const { approvals } = stubSuggest({ proposals: [PROPOSAL] });
+    server.use(getGetProposalOutlookMockHandler(outlook({ thin: true })));
+    renderPanel(() => {});
+    await user.type(await screen.findByLabelText("Channel intent"), "80s teen comedies");
+    await user.click(screen.getByRole("button", { name: /suggest a lineup/i }));
+    await user.click(await screen.findByRole("button", { name: "Add more variety" }));
+    expect(await screen.findByLabelText("Channel intent")).toHaveValue("80s teen comedies");
+    expect(approvals).toEqual([]);
   });
 
   it("explains an auto-approved result without offering the misleading Start over action", async () => {

@@ -59,7 +59,8 @@ const groundedMaxTokens = 2048
 // on a themed intent — correct genres, but the call landed in content, not tool_calls.)
 func chatOpts(tools []llm.ToolSchema, temp float64) llm.ChatOptions {
 	return llm.ChatOptions{
-		Tools: tools, JSONMode: len(tools) == 0, Temperature: &temp, MaxTokens: groundedMaxTokens,
+		Profile: llm.GroundedSelection,
+		Tools:   tools, JSONMode: len(tools) == 0, Temperature: &temp, MaxTokens: groundedMaxTokens,
 	}
 }
 
@@ -111,8 +112,8 @@ func (s *Suggester) WithRatings(r RatingSource) *Suggester {
 	return s
 }
 
-// WithReferences enables bounded source resolution for pasted public pages. A
-// nil resolver makes a URL-backed Intent fail closed before model inference.
+// WithReferences enables bounded public-page resolution. Resolvers implementing
+// reference.Discoverer also support automatic named-block source discovery.
 func (s *Suggester) WithReferences(resolver reference.Resolver) *Suggester {
 	s.references = resolver
 	return s
@@ -313,6 +314,11 @@ func (s *Suggester) Suggest(ctx context.Context, intent Intent) (Proposal, error
 			}
 		}
 		if perr == nil {
+			if !sources.initialized {
+				for _, pick := range out.Picks {
+					sources.titleHints = append(sources.titleHints, pick.Name)
+				}
+			}
 			sourceResult, sourceErr := s.initializeSources(ctx, &intent, *acceptedMeaning, &sources)
 			if sourceErr != nil {
 				terminal := TerminalRetrievalFailure
@@ -337,7 +343,7 @@ func (s *Suggester) Suggest(ctx context.Context, intent Intent) (Proposal, error
 					}
 				}
 			}
-			if sources.hasReference && !referenceFinalized {
+			if sources.hasReference && !referenceFinalized && !sources.presented {
 				// Bootstrap picks are ungrounded by design. Continue within this
 				// generation after inserting only real reference catalog evidence.
 				// Refresh the original intent message now that bounded reference
@@ -346,6 +352,7 @@ func (s *Suggester) Suggest(ctx context.Context, intent Intent) (Proposal, error
 				mergeDecisionTrace(&trace, &sourceResult.reference.trace)
 				messages = append(messages, sourceResult.reference.messages...)
 				finalizationOnly, referenceFinalized, sameGenerationNext = true, true, true
+				sources.presented = true
 				continue
 			}
 			if len(surfaced) == 0 && len(out.Picks) > 0 {
@@ -411,7 +418,18 @@ func (s *Suggester) generate(ctx context.Context, messages *[]llm.Message, tools
 		// what is happening now, not what is about to.
 		reportProgress(ctx, PhaseReasoning, round+1)
 		ledger.generationTurns++
-		resp, err := s.llm.Chat(ctx, *messages, chatOpts(tools, temp))
+		requestMessages := *messages
+		if sources.hasReference && *acceptedMeaning == nil {
+			requestMessages = referenceInterpretationMessages(requestMessages)
+		}
+		if len(tools) == 0 {
+			var err error
+			requestMessages, err = finalizationMessages(requestMessages, *acceptedMeaning)
+			if err != nil {
+				return "", err
+			}
+		}
+		resp, err := s.llm.Chat(ctx, requestMessages, chatOpts(tools, temp))
 		if err != nil {
 			cause := err
 			if errors.Is(ctx.Err(), context.Canceled) && !errors.Is(err, context.Canceled) {
@@ -465,12 +483,18 @@ func (s *Suggester) generate(ctx context.Context, messages *[]llm.Message, tools
 						if *acceptedMeaning == nil {
 							*acceptedMeaning = meaning
 						}
+						if !sources.initialized && prepared.collection {
+							anchors, _ := collectionTitleAnchors(prepared.arguments["titles"])
+							for _, anchor := range anchors {
+								sources.titleHints = append(sources.titleHints, anchor.name)
+							}
+						}
 						sourceResult, sourceErr := s.initializeSources(ctx, intent, *meaning, sources)
 						if sourceErr != nil {
 							trace.Terminal = TerminalRetrievalFailure
 							return "", NewFailure(FailureProvider, *trace, sourceErr)
 						}
-						for _, candidates := range [][]catalog.Candidate{sourceResult.curated, sourceResult.explicit} {
+						for _, candidates := range [][]catalog.Candidate{sourceResult.reference.candidates, sourceResult.curated, sourceResult.explicit} {
 							for _, candidate := range candidates {
 								if key, keyErr := candidate.Key(); keyErr == nil {
 									surfaced[key] = candidate
@@ -511,6 +535,12 @@ func (s *Suggester) generate(ctx context.Context, messages *[]llm.Message, tools
 				*messages = append(*messages, llm.Message{
 					Role: llm.Tool, Content: result, ToolCallID: tc.ID,
 				})
+				if sources.hasReference && !sources.presented {
+					(*messages)[1].Content = userPrompt(*intent)
+					*messages = append(*messages, sources.result.reference.messages...)
+					mergeDecisionTrace(trace, &sources.result.reference.trace)
+					sources.presented = true
+				}
 				// A non-empty grounded result moves the conversation into a distinct
 				// finalization phase. Leaving catalog_search available here caused Gemma,
 				// Qwen, and gpt-oss to repeat the same useful search until the hard tool

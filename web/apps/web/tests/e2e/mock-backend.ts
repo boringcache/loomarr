@@ -1,4 +1,5 @@
 import type { Page, Route } from "@playwright/test";
+import { outlook } from "../../src/test/fixtures/outlook";
 
 // A stateful stand-in for /v1, installed with Playwright route interception. It is
 // deliberately NOT a second API implementation: it answers only what the wizard calls,
@@ -254,7 +255,20 @@ const installMockBackend = async (page: Page, opts: MockOptions = {}): Promise<M
               lineup: [{ name: "Heat", year: 1995, mediaType: "movie", inLibrary: true }],
               acquisitions: [],
               alternates: [],
-              scores: { themeFit: 1, availabilityRatio: 1, eraBalance: 1, overall: 1 },
+              scores: {
+                version: 1,
+                themeFit: 1,
+                availabilityRatio: 1,
+                eraBalance: null,
+                theme: {
+                  status: "supported",
+                  basis: "qualifiers",
+                  assessedItems: 2,
+                  unknownItems: 0,
+                  qualifiers: [{ term: "action", supportedItems: 2 }],
+                },
+                era: { status: "not_requested", assessedItems: 0, matchingItems: 0, unknownItems: 0 },
+              },
               trace: { version: 1, surfacedTotal: 1, recordedTotal: 1, truncated: false, candidates: [] },
             },
           },
@@ -263,6 +277,24 @@ const installMockBackend = async (page: Page, opts: MockOptions = {}): Promise<M
           updatedAt: "2026-09-07T12:00:01Z",
         });
       }
+    }
+    if (/^\/v1\/proposals\/[^/]+\/outlook$/.test(path) && method === "POST") {
+      // This mock owns no media inventory. Return an explicit unknown assessment,
+      // using the typed shared fixture, rather than the generic empty success body.
+      return json(
+        route,
+        outlook({
+          state: "uncertain",
+          titles: 1,
+          scheduledTitles: 0,
+          unknownTitles: 1,
+          programs: 0,
+          seasons: 0,
+          uniqueRuntimeMs: 0,
+          firstRepeatMs: null,
+          mix: { core: 0, adjacent: 0, discovery: 0, unknown: 1 },
+        }),
+      );
     }
     if (path === "/v1/proposals" && method === "GET") {
       // Shaped as the real ProposalDTO (`proposal.intent.description`, `.rationale`,
@@ -283,7 +315,20 @@ const installMockBackend = async (page: Page, opts: MockOptions = {}): Promise<M
             // One acquisition: the in-library pick needs nothing, so only the missing
             // title spends anything (§8).
             acquisitions: [{ name: "Gargoyles", year: 1994, mediaType: "series", tmdbId: 12345 }],
-            scores: { themeFit: 0.9, availabilityRatio: 0.5, coherence: 0.8 },
+            scores: {
+              version: 1,
+              themeFit: 1,
+              availabilityRatio: 0.5,
+              eraBalance: null,
+              theme: {
+                status: "supported",
+                basis: "qualifiers",
+                assessedItems: 2,
+                unknownItems: 0,
+                qualifiers: [{ term: "action", supportedItems: 2 }],
+              },
+              era: { status: "not_requested", assessedItems: 0, matchingItems: 0, unknownItems: 0 },
+            },
           },
         }));
       return json(route, { proposals: rows });

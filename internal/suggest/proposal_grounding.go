@@ -70,6 +70,7 @@ func (s *Suggester) buildProposal(ctx context.Context, intent Intent, out finalO
 		// intent is already here, and votes are a property of what was OFFERED, not of what
 		// the catalog returned — keeping them off Candidate keeps identity clean.
 		item.AdjacentVotes = adjacentVotesOf(intent, provision.Key(key))
+		item.EditorialRole = editorialRole(intent, provision.Key(key), cand.Source, item.AdjacentVotes)
 		// Grounding chokepoint: attach the model's proposed AIRING season window only
 		// for a series, and only after clamping (an inverted or non-positive range is
 		// dropped → all seasons, never an empty channel). The range can only NARROW an
@@ -162,7 +163,7 @@ func (s *Suggester) buildProposal(ctx context.Context, intent Intent, out finalO
 	// ratio and theme fit for a lineup nobody is being offered — the scorecard already half-knew
 	// something was wrong on the live smoke (theme fit 43%) and that ambiguity is what a refusal
 	// list replaces with a statement.
-	prop.Scores = score(intent, prop.Lineup, prop.Acquisitions)
+	prop.Scores = score(intent, prop.Lineup, prop.Acquisitions, meaning)
 	if trace != nil {
 		// Tool calls contribute evidence, not the run outcome. A later empty or
 		// failed lookup cannot label a proposal that ultimately succeeded from an
@@ -531,4 +532,21 @@ func intersectSeries(want, grounded []provision.Key) []provision.Key {
 		return nil
 	}
 	return kept
+}
+
+// editorialRole is called only after identity and membership grounding. These
+// categories describe explicit choices and provenance, not inferred preferences.
+func editorialRole(intent Intent, key provision.Key, source catalog.Scope, votes int) EditorialRole {
+	if intent.membershipKeys[key] || intent.referenceKeys[key] || (intent.curatedTitleSet && intent.curatedTitleKey == key) {
+		return EditorialCore
+	}
+	for _, retained := range intent.CurrentLineup {
+		if retained.Key == string(key) {
+			return EditorialCore
+		}
+	}
+	if source == catalog.ScopeAdjacent && votes > 0 {
+		return EditorialAdjacent
+	}
+	return EditorialDiscovery
 }

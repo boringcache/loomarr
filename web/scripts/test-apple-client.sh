@@ -3,6 +3,7 @@
 set -euo pipefail
 
 readonly APP_NAME="${1:-mobile}"
+readonly APPLE_SIMULATOR_ID="${LOOMARR_APPLE_SIMULATOR_ID:-}"
 WEB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly WEB_ROOT
 readonly APP_DIR="${WEB_ROOT}/apps/${APP_NAME}"
@@ -75,12 +76,27 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   printf 'Apple client verification requires macOS with Xcode\n' >&2
   exit 2
 fi
-for command_name in jq xcodebuild xcrun; do
+for command_name in jq xcodebuild xcrun python3 ruby; do
   command -v "${command_name}" >/dev/null 2>&1 || {
     printf '%s is required for Apple client verification\n' "${command_name}" >&2
     exit 2
   }
 done
+# This verifier qualifies the reviewed package pins, never caller-selected source
+# revisions, local tarballs, another Hermes generation, or repository overrides.
+for native_override in REACT_NATIVE_OVERRIDE_HERMES_DIR HERMES_ENGINE_TARBALL_PATH \
+  HERMES_COMMIT RCT_BUILD_HERMES_FROM_SOURCE RCT_HERMES_V1_ENABLED ENTERPRISE_REPOSITORY \
+  RCT_USE_RN_DEP RCT_USE_LOCAL_RN_DEP RCT_DEPS_VERSION \
+  RCT_USE_PREBUILT_RNCORE RCT_TESTONLY_RNCORE_VERSION RCT_TESTONLY_RNCORE_TARBALL_PATH \
+  REACT_NATIVE_OVERRIDE_NIGHTLY_BUILD_VERSION RNTV_TESTONLY_LOCAL_RNCORE_REPOSITORY; do
+  if printenv "$native_override" >/dev/null; then
+    printf 'apple-client: %s overrides the qualified dependency selection\n' "$native_override" >&2
+    exit 2
+  fi
+done
+ruby "${WEB_ROOT}/scripts/hermes-download-test.rb"
+ruby "${WEB_ROOT}/scripts/native-release-selection-test.rb"
+ruby "${WEB_ROOT}/scripts/native-artifact-download-test.rb"
 REAL_XCODEBUILD="$(command -v xcodebuild)"
 readonly REAL_XCODEBUILD
 xcodebuild -version
@@ -134,6 +150,10 @@ for arg in "${args[@]}"; do
     -resultBundlePath) capture_result=false; break ;;
   esac
 done
+if [[ "$capture_result" == true ]]; then
+  # A generic simulator destination has no selected device from which to infer an active slice.
+  args+=("ARCHS=$(uname -m)")
+fi
 if [[ "$capture_result" == true && -n "${LOOMARR_APPLE_RESULT_BUNDLE_PATH:-}" ]]; then
   args+=(-resultBundlePath "$LOOMARR_APPLE_RESULT_BUNDLE_PATH")
 fi
@@ -154,12 +174,13 @@ chmod +x "$XCODE_CAPTURE_DIR/xcodebuild"
 
 simulator_started_at="$(date +%s)"
 simulator_json="$(xcrun simctl list devices available --json)"
-simulator_id="$(jq -r --arg runtime "${RUNTIME_TOKEN}" '
-  [.devices | to_entries[] | select(.key | contains($runtime)) | .value[] | select(.isAvailable)]
+simulator_id="$(jq -r --arg runtime "${RUNTIME_TOKEN}" --arg requested "$APPLE_SIMULATOR_ID" '
+  [.devices | to_entries[] | select(.key | contains($runtime)) | .value[]
+   | select(.isAvailable) | select($requested == "" or .udid == $requested)]
   | last | .udid // empty
 ' <<<"${simulator_json}")"
 if [[ -z "${simulator_id}" ]]; then
-  printf 'no available %s simulator is installed\n' "${RUNTIME_TOKEN}" >&2
+  printf 'no available %s simulator matches the requested selection\n' "${RUNTIME_TOKEN}" >&2
   exit 1
 fi
 
@@ -171,10 +192,19 @@ if [[ "${simulator_state}" != "Booted" ]]; then
   xcrun simctl boot "${simulator_id}"
   booted_here=true
 fi
+readonly DIAGNOSTIC_STARTED_AT="$simulator_started_at"
 cleanup() {
+  local original_status=$?
+  trap - EXIT
+  if (( original_status != 0 )); then
+    python3 "${WEB_ROOT}/scripts/apple-launch-diagnostics.py" \
+      "$ARTIFACTS_DIR" "${BUILD_DIR}/${SCHEME}.app" "$SCHEME" "$BUNDLE_ID" \
+      "$simulator_id" "$DIAGNOSTIC_STARTED_AT" || true
+  fi
   if [[ "${booted_here}" == "true" ]]; then
     xcrun simctl shutdown "${simulator_id}" >/dev/null 2>&1 || true
   fi
+  exit "$original_status"
 }
 trap cleanup EXIT
 
@@ -231,7 +261,7 @@ expo_run=(
   pnpm exec expo run:ios
   --scheme "${SCHEME}"
   --configuration Release
-  --device "${simulator_id}"
+  --device generic
   --no-install
   --no-bundler
   --output "${BUILD_DIR}"
@@ -328,6 +358,8 @@ if [[ "$build_mode" == warm ]]; then
 else
   run_expo_build cold
 fi
+# Expo's generic destination builds without physical-device enumeration or an implicit launch.
+xcrun simctl install "${simulator_id}" "${BUILD_DIR}/${SCHEME}.app"
 record_phase_timing native_build_install "$native_build_started_at"
 
 # Release simulator builds default to every standard architecture. Hosted Apple jobs run on one
@@ -351,9 +383,12 @@ if [[ "${APP_ARCHS}" != "${HOST_ARCH}" ]]; then
 fi
 printf 'apple-client: %s simulator executable contains only %s\n' "${APP_NAME}" "${HOST_ARCH}"
 
-# Expo owns dependency installation, CocoaPods, compilation, installation, and
-# initial launch. Relaunch once to obtain the host PID used by the liveness check.
-launch_output="$(xcrun simctl launch --terminate-running-process "${simulator_id}" "${BUNDLE_ID}")"
+# Launch the explicitly installed app and retain the host PID used by the liveness check.
+xcrun simctl launch --terminate-running-process \
+  --stdout="${ARTIFACTS_DIR}/launch.stdout.log" --stderr="${ARTIFACTS_DIR}/launch.stderr.log" \
+  "${simulator_id}" "${BUNDLE_ID}" >"${ARTIFACTS_DIR}/launch-command.stdout.log" \
+  2>"${ARTIFACTS_DIR}/launch-command.stderr.log"
+launch_output="$(cat "${ARTIFACTS_DIR}/launch-command.stdout.log")"
 printf '%s\n' "${launch_output}"
 launch_pid="${launch_output##*: }"
 if [[ ! "${launch_pid}" =~ ^[0-9]+$ ]]; then
@@ -387,7 +422,7 @@ if ! /bin/kill -0 "${launch_pid}"; then
     --last 2m \
     --style compact \
     --predicate "process == '${SCHEME}' OR eventMessage CONTAINS[c] '${BUNDLE_ID}'" \
-    | tee "${ARTIFACTS_DIR}/${APP_NAME}.log" >&2
+    | tee "${ARTIFACTS_DIR}/${APP_NAME}.log" >&2 || true
   exit 1
 fi
 printf 'apple-client: %s built, installed, launched, and remained alive on %s\n' \
