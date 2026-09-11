@@ -21,7 +21,7 @@ use `phase=connect` only when a new CI connection is needed.
 
 The Dockerfile's Rust build still uses the checked-in Rust toolchain. Go uses
 1.27.0; Node uses 22.23.2; Java uses Temurin 21.0.12+1. The One distribution is
-`404b744a2053da4cf963f13f615f7fafe94f3cf7` (v1.30.1); leave `cli_version` empty to
+`1039999c65011be670f5655e0e48ad556188ab12` (v1.30.4); leave `cli_version` empty to
 use its released default. An explicit value is a canary, not a comparison default.
 
 ## Compatibility findings from the first seed
