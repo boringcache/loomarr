@@ -290,6 +290,8 @@ func cacheReplayPolicy(value string) string {
 
 func registerCacheReplayJob(catalog *workflowAuthorityRegistry, source, name string) {
 	const replay = "boringcache-validation.yml"
+	const previousBoringCacheOneAction = "boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7"
+	const replayBoringCacheOneAction = "boringcache/one@1039999c65011be670f5655e0e48ad556188ab12"
 	catalog.topology[replay].jobs[name] = catalog.topology[source].jobs["run"]
 	catalog.jobContexts[workflowJobContextKey{workflow: replay, job: name}] = catalog.jobContexts[workflowJobContextKey{workflow: source, job: "run"}]
 	sourceJob := catalog.runs[source].jobs["run"]
@@ -306,6 +308,10 @@ func registerCacheReplayJob(catalog *workflowAuthorityRegistry, source, name str
 	catalog.runs[replay].jobs[name] = job
 	for key, authority := range catalog.actions {
 		if key.workflow == source {
+			// Native workflows retain their reviewed action pin. The replay workflow
+			// follows the release under test, so its copied cache actions use the
+			// current BoringCache One action pin.
+			authority = strings.ReplaceAll(authority, previousBoringCacheOneAction, replayBoringCacheOneAction)
 			catalog.actions[workflowActionKey{workflow: replay, job: name, step: key.step}] = cacheReplayPolicy(authority)
 		}
 	}
