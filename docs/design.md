@@ -10092,8 +10092,8 @@ The rule this encodes: **a claim about behaviour belongs next to a test, or it b
 ## 14. Technology stack (decided)
 
 **Fork cache validation (2026-09-10).** The `boringcache-validation` branch uses
-BoringCache One v1.30.1 at distribution commit
-`404b744a2053da4cf963f13f615f7fafe94f3cf7` and its released default CLI.
+BoringCache One v1.30.4 at distribution commit
+`1039999c65011be670f5655e0e48ad556188ab12` and its released default CLI.
 `.boringcache.toml` owns the dedicated `boringcache/loomarr` workspace, cache paths,
 profiles and tags. GitHub OIDC grants the fork short-lived workspace access;
 trusted validation runs publish and pull requests and warm consumers restore only.

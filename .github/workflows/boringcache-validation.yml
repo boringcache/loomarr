@@ -89,7 +89,7 @@ jobs:
       - uses: taiki-e/install-action@c44f6b046f1c29ae5918b1e0bfdbb2f1813836fd # v2.84.1
         with:
           tool: sccache@0.17.0
-      - uses: boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7 # v1.30.1
+      - uses: boringcache/one@1039999c65011be670f5655e0e48ad556188ab12 # v1.30.4
         with:
           cli-version: ${{ inputs.cli_version }}
           mode: archive
@@ -107,7 +107,7 @@ jobs:
             echo 'CARGO=boringcache cargo --write' >> "$GITHUB_ENV"
           fi
       - name: BoringCache Go dependencies and FFmpeg
-        uses: boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7 # v1.30.1
+        uses: boringcache/one@1039999c65011be670f5655e0e48ad556188ab12 # v1.30.4
         with:
           cli-version: ${{ inputs.cli_version }}
           mode: archive
@@ -115,7 +115,7 @@ jobs:
           trust-policy: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group' || inputs.phase == 'warm') && 'restore' || 'auto' }}
           fail-on-cache-error: true
       - name: BoringCache go
-        uses: boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7 # v1.30.1
+        uses: boringcache/one@1039999c65011be670f5655e0e48ad556188ab12 # v1.30.4
         with:
           cli-version: ${{ inputs.cli_version }}
           mode: go
@@ -164,7 +164,7 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: false
       - name: BoringCache archive
-        uses: boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7 # v1.30.1
+        uses: boringcache/one@1039999c65011be670f5655e0e48ad556188ab12 # v1.30.4
         with:
           cli-version: ${{ inputs.cli_version }}
           mode: archive
@@ -209,7 +209,7 @@ jobs:
       - uses: taiki-e/install-action@c44f6b046f1c29ae5918b1e0bfdbb2f1813836fd # v2.84.1
         with:
           tool: sccache@0.17.0
-      - uses: boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7 # v1.30.1
+      - uses: boringcache/one@1039999c65011be670f5655e0e48ad556188ab12 # v1.30.4
         with:
           cli-version: ${{ inputs.cli_version }}
           mode: archive
@@ -254,7 +254,7 @@ jobs:
       - uses: taiki-e/install-action@c44f6b046f1c29ae5918b1e0bfdbb2f1813836fd # v2.84.1
         with:
           tool: sccache@0.17.0
-      - uses: boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7 # v1.30.1
+      - uses: boringcache/one@1039999c65011be670f5655e0e48ad556188ab12 # v1.30.4
         with:
           cli-version: ${{ inputs.cli_version }}
           mode: archive
@@ -272,7 +272,7 @@ jobs:
             echo 'CARGO=boringcache cargo --write' >> "$GITHUB_ENV"
           fi
       - name: BoringCache go
-        uses: boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7 # v1.30.1
+        uses: boringcache/one@1039999c65011be670f5655e0e48ad556188ab12 # v1.30.4
         with:
           cli-version: ${{ inputs.cli_version }}
           mode: go
@@ -332,20 +332,20 @@ jobs:
             echo 'CMAKE_C_COMPILER_LAUNCHER=ccache'
             echo 'CMAKE_CXX_COMPILER_LAUNCHER=ccache'
           } >> "$GITHUB_ENV"
-      - uses: boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7 # v1.30.1
+      - uses: boringcache/one@1039999c65011be670f5655e0e48ad556188ab12 # v1.30.4
         with:
           cli-version: ${{ inputs.cli_version }}
           mode: archive
           cache-profiles: android
           trust-policy: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group' || inputs.phase == 'warm') && 'restore' || 'auto' }}
           fail-on-cache-error: true
-      - uses: boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7 # v1.30.1
+      - uses: boringcache/one@1039999c65011be670f5655e0e48ad556188ab12 # v1.30.4
         with:
           cli-version: ${{ inputs.cli_version }}
           mode: gradle
           trust-policy: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group' || inputs.phase == 'warm') && 'restore' || 'auto' }}
           fail-on-cache-error: true
-      - uses: boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7 # v1.30.1
+      - uses: boringcache/one@1039999c65011be670f5655e0e48ad556188ab12 # v1.30.4
         with:
           cli-version: ${{ inputs.cli_version }}
           mode: ccache
@@ -417,20 +417,20 @@ jobs:
             echo 'CMAKE_C_COMPILER_LAUNCHER=ccache'
             echo 'CMAKE_CXX_COMPILER_LAUNCHER=ccache'
           } >> "$GITHUB_ENV"
-      - uses: boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7 # v1.30.1
+      - uses: boringcache/one@1039999c65011be670f5655e0e48ad556188ab12 # v1.30.4
         with:
           cli-version: ${{ inputs.cli_version }}
           mode: archive
           cache-profiles: android
           trust-policy: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group' || inputs.phase == 'warm') && 'restore' || 'auto' }}
           fail-on-cache-error: true
-      - uses: boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7 # v1.30.1
+      - uses: boringcache/one@1039999c65011be670f5655e0e48ad556188ab12 # v1.30.4
         with:
           cli-version: ${{ inputs.cli_version }}
           mode: gradle
           trust-policy: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group' || inputs.phase == 'warm') && 'restore' || 'auto' }}
           fail-on-cache-error: true
-      - uses: boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7 # v1.30.1
+      - uses: boringcache/one@1039999c65011be670f5655e0e48ad556188ab12 # v1.30.4
         with:
           cli-version: ${{ inputs.cli_version }}
           mode: ccache
@@ -479,7 +479,7 @@ jobs:
           lscpu
           sha256sum go.sum Cargo.lock rust-toolchain.toml web/pnpm-lock.yaml
       - name: BoringCache docker
-        uses: boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7 # v1.30.1
+        uses: boringcache/one@1039999c65011be670f5655e0e48ad556188ab12 # v1.30.4
         with:
           cli-version: ${{ inputs.cli_version }}
           mode: docker
@@ -536,7 +536,7 @@ jobs:
       - name: Enable pnpm (pinned via web/package.json packageManager)
         run: corepack enable
       - name: BoringCache archive
-        uses: boringcache/one@404b744a2053da4cf963f13f615f7fafe94f3cf7 # v1.30.1
+        uses: boringcache/one@1039999c65011be670f5655e0e48ad556188ab12 # v1.30.4
         with:
           cli-version: ${{ inputs.cli_version }}
           mode: archive
